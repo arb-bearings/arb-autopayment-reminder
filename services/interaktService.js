@@ -81,12 +81,16 @@ export async function sendPaymentReminder(phoneNumber, bodyValues, mediaUrl, fil
   }
 
   try {
-    const response = await axios.post(INTERAKT_MESSAGE_URL, payload, {
-      headers: {
-        Authorization: `Basic ${apiKey}`,
-        "Content-Type": "application/json"
+    const response = await axios.post(
+      INTERAKT_MESSAGE_URL,
+      payload,
+      {
+        headers: {
+          Authorization: `Basic ${apiKey}`,
+          "Content-Type": "application/json"
+        }
       }
-    });
+    );
 
     return response.data;
   } catch (error) {
