@@ -56,6 +56,15 @@ type PaymentSummary = {
   previousDues: DueRecord[];
 };
 
+type ReminderDisplayData = {
+  customerName: string;
+  invoiceNumber: string;
+  currentDue: string;
+  previousDue: string;
+  totalDue: string;
+  pendingDays: number;
+};
+
 function escapeHtml(value: string | number) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -153,6 +162,31 @@ function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): Pay
   };
 }
 
+function getOtherPendingInvoices(due: DueRecord, allDuesForDealer: DueRecord[]) {
+  const currentInvoiceNumber = normalizeText(due.invoiceNumber || due.reference || "");
+
+  return allDuesForDealer
+    .filter((entry) => entry.id !== due.id && entry.amount > 0)
+    .filter((entry) => {
+      const invoiceNumber = normalizeText(entry.invoiceNumber || entry.reference || "");
+      return !currentInvoiceNumber || invoiceNumber !== currentInvoiceNumber;
+    })
+    .sort((left, right) => {
+      const leftDueDate = new Date(left.dueDate || left.billDate || left.invoiceDate || "");
+      const rightDueDate = new Date(right.dueDate || right.billDate || right.invoiceDate || "");
+      const leftTime = Number.isNaN(leftDueDate.getTime()) ? Number.POSITIVE_INFINITY : leftDueDate.getTime();
+      const rightTime = Number.isNaN(rightDueDate.getTime()) ? Number.POSITIVE_INFINITY : rightDueDate.getTime();
+
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+
+      return (left.invoiceNumber || left.reference || "").localeCompare(
+        right.invoiceNumber || right.reference || ""
+      );
+    });
+}
+
 function buildReplacements(context: ReminderContext, senderCompany: string) {
   const billDate = context.due.billDate || context.due.invoiceDate;
   const invoiceAmount = formatCurrency(context.due.amount, context.due.currency);
@@ -180,10 +214,16 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     cdSummary: buildCashDiscountSummary(context.cdEvaluation),
     companyName: context.due.companyName,
     company_name: context.due.companyName,
+    customerName:
+      context.contact.primaryContact ||
+      context.due.matchedContactName ||
+      context.due.companyName ||
+      "Customer",
     contactName:
       context.contact.primaryContact ||
       context.due.matchedContactName ||
       "Accounts Team",
+    currentDue: currentInvoiceDueAmount,
     currentInvoiceDueAmount,
     current_invoice_due_amount: currentInvoiceDueAmount,
     daysBeforeDue: context.rule.triggerDay,
@@ -197,15 +237,75 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     invoice_no: invoiceNumber,
     openingAmount: formatCurrency(context.due.openingAmount, context.due.currency),
     overdueDays: context.due.overdueDays,
+    pendingDays: context.billAgeDays,
+    previousDue: previousDueAmount,
     previousDueAmount,
     previous_due_amount: previousDueAmount,
     pendingAmount: formatCurrency(context.due.amount, context.due.currency),
     reference: context.due.reference || context.due.invoiceNumber || "N/A",
     reminderDay: context.rule.triggerDay,
     senderCompany,
+    totalDue: totalDueAmount,
     totalDueAmount,
     total_due_amount: totalDueAmount
   };
+}
+
+function buildReminderDisplayData(
+  log: ReminderLog,
+  due: DueRecord,
+  paymentSummary: PaymentSummary,
+  currency: string
+): ReminderDisplayData {
+  return {
+    customerName: due.matchedContactName || due.companyName || "Customer",
+    invoiceNumber: log.invoiceNumber || due.invoiceNumber || due.reference || "N/A",
+    currentDue: formatCurrency(paymentSummary.currentInvoiceDue, currency),
+    previousDue: formatCurrency(paymentSummary.previousDue, currency),
+    totalDue: formatCurrency(paymentSummary.totalDue, currency),
+    pendingDays: log.billAgeDays
+  };
+}
+
+function buildReminderMessageText(display: ReminderDisplayData) {
+  return [
+    `Dear ${display.customerName},`,
+    "",
+    "This is a friendly reminder regarding your outstanding payment.",
+    "",
+    `Your Total Due is ${display.totalDue}.`,
+    "",
+    "This amount consists of:",
+    "",
+    `- Previous Due: ${display.previousDue}`,
+    "",
+    `- Current Due: ${display.currentDue}`,
+    "",
+    `The bill has now been pending for ${display.pendingDays} days.`,
+    "",
+    "Kindly complete the payment at your earliest convenience to avoid any interruption in service.",
+    "",
+    "If payment has already been made, please ignore this reminder.",
+    "",
+    "Thank you."
+  ].join("\n");
+}
+
+function buildReminderMessageHtml(display: ReminderDisplayData) {
+  return `
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">Dear ${escapeHtml(display.customerName)},</p>
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">This is a friendly reminder regarding your outstanding payment.</p>
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">Your <strong style="color:#111827;">Total Due</strong> is <strong style="color:#0f766e;">${escapeHtml(display.totalDue)}</strong>.</p>
+    <p style="margin:0 0 8px;line-height:1.55;color:#374151;">This amount consists of:</p>
+    <ul style="margin:0 0 14px 20px;padding:0;color:#374151;line-height:1.65;">
+      <li><strong style="color:#111827;">Previous Due:</strong> ${escapeHtml(display.previousDue)}</li>
+      <li><strong style="color:#111827;">Current Due:</strong> ${escapeHtml(display.currentDue)}</li>
+    </ul>
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">The bill has now been pending for <strong style="color:#111827;">${escapeHtml(display.pendingDays)}</strong> days.</p>
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">Kindly complete the payment at your earliest convenience to avoid any interruption in service.</p>
+    <p style="margin:0 0 14px;line-height:1.55;color:#374151;">If payment has already been made, please ignore this reminder.</p>
+    <p style="margin:0;line-height:1.55;color:#374151;">Thank you.</p>
+  `;
 }
 
 function buildChannelEntries(
@@ -348,18 +448,15 @@ function buildBasicEmailHtml(content: string) {
 function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDealer: DueRecord[]) {
   const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
   const currency = due.currency || "INR";
-  const previousRows = paymentSummary.previousDues.map((entry) => `
+  const display = buildReminderDisplayData(log, due, paymentSummary, currency);
+  const otherPendingInvoices = getOtherPendingInvoices(due, allDuesForDealer);
+  const otherPendingRows = otherPendingInvoices.map((entry) => `
     <tr>
       <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;">${escapeHtml(entry.invoiceNumber || entry.reference || "N/A")}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.billDate ? formatDate(entry.billDate) : "Not available")}</td>
+      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.dueDate ? formatDate(entry.dueDate) : "Not available")}</td>
       <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#111827;">${escapeHtml(formatCurrency(entry.amount, entry.currency || currency))}</td>
     </tr>
   `);
-  const bodyHtml = log.content
-    .split(/\n{2,}/)
-    .filter((paragraph) => !/^Payment Summary:/i.test(paragraph.trim()))
-    .map((paragraph) => `<p style="margin:0 0 14px;line-height:1.55;color:#374151;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
-    .join("");
 
   return `
     <!doctype html>
@@ -368,73 +465,73 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
         <div style="max-width:720px;margin:0 auto;padding:28px 18px;">
           <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
             <div style="padding:24px 26px;background:#0f766e;color:#ffffff;">
-              <div style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#ccfbf1;font-weight:700;">Payment Reminder</div>
-              <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#ffffff;">Invoice ${escapeHtml(log.invoiceNumber || due.invoiceNumber || due.reference || "N/A")}</h1>
-              <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || due.dealerCode || "Customer")}</div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                <tr>
+                  <td style="width:52px;vertical-align:top;">
+                    <div style="width:42px;height:42px;border-radius:8px;background:#ffffff;color:#0f766e;font-size:16px;font-weight:900;line-height:42px;text-align:center;">AP</div>
+                  </td>
+                  <td style="vertical-align:top;">
+                    <div style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#ccfbf1;font-weight:700;">Payment Reminder</div>
+                    <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#ffffff;">Invoice ${escapeHtml(display.invoiceNumber)}</h1>
+                    <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || "Customer")}</div>
+                  </td>
+                </tr>
+              </table>
             </div>
             <div style="padding:22px 26px;">
+              <div style="margin:0 0 16px;color:#6b7280;font-size:13px;line-height:1.5;">
+                <strong style="color:#374151;">Customer Name:</strong> ${escapeHtml(display.customerName)} &nbsp;|&nbsp;
+                <strong style="color:#374151;">Invoice Number:</strong> ${escapeHtml(display.invoiceNumber)}
+              </div>
+
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 -8px 18px;">
                 <tr>
                   <td style="width:33.33%;padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Current Invoice Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#111827;">${escapeHtml(formatCurrency(paymentSummary.currentInvoiceDue, currency))}</div>
+                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Total Due</div>
+                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(display.totalDue)}</div>
                     </div>
                   </td>
                   <td style="width:33.33%;padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
                       <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Previous Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#b45309;">${escapeHtml(formatCurrency(paymentSummary.previousDue, currency))}</div>
+                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#b45309;">${escapeHtml(display.previousDue)}</div>
                     </div>
                   </td>
                   <td style="width:33.33%;padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Total Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</div>
+                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Current Due</div>
+                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#111827;">${escapeHtml(display.currentDue)}</div>
                     </div>
                   </td>
                 </tr>
               </table>
 
               <div style="margin-bottom:20px;">
-                ${bodyHtml}
+                ${buildReminderMessageHtml(display)}
               </div>
 
-              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Invoice Details</h2>
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-                <tbody>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Invoice Number</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;font-weight:700;">${escapeHtml(due.invoiceNumber || due.reference || "N/A")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Dealer Code</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeHtml(due.dealerCode || due.customerCode || "N/A")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Bill Date</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeHtml(due.billDate ? formatDate(due.billDate) : "Not available")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;color:#6b7280;font-weight:700;">Due Date</td>
-                    <td style="padding:11px 13px;color:#111827;">${escapeHtml(due.dueDate ? formatDate(due.dueDate) : "Not available")}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Previous Due Breakdown</h2>
+              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Other Pending Invoices</h2>
               <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
                 <thead>
                   <tr style="background:#f9fafb;">
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Bill Date</th>
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice Number</th>
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Due Date</th>
                     <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${previousRows.join("") || `<tr><td colspan="3" style="padding:14px;color:#6b7280;">No previous dues found for this dealer code.</td></tr>`}
+                  ${otherPendingRows.join("") || `<tr><td colspan="3" style="padding:14px;color:#6b7280;">No other pending invoices were found for this customer.</td></tr>`}
                 </tbody>
               </table>
+
+              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Payment Instructions</h2>
+              <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;color:#374151;line-height:1.55;">
+                Please complete the payment using the payment link or standard payment method shared for this invoice. Contact the accounts team if you need any supporting documents.
+              </div>
+            </div>
+            <div style="padding:16px 26px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;line-height:1.5;text-align:center;">
+              This reminder was generated by Auto Payment Reminder. Please ignore this message if payment has already been made.
             </div>
           </div>
         </div>
@@ -442,7 +539,6 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     </html>
   `;
 }
-
 function evaluateCashDiscountEligibility(
   due: DueRecord,
   allDuesForDealer: DueRecord[],
@@ -893,11 +989,22 @@ async function sendEmail(
       : undefined
   });
 
+  const emailText = due
+    ? buildReminderMessageText(
+        buildReminderDisplayData(
+          log,
+          due,
+          buildPaymentSummary(due, allDuesForDealer),
+          due.currency || "INR"
+        )
+      )
+    : log.content;
+
   await transporter.sendMail({
     from: settings.senderEmail || settings.smtpFrom,
     to: log.recipient,
     subject: log.subject,
-    text: log.content,
+    text: emailText,
     html: due ? buildReminderEmailHtml(log, due, allDuesForDealer) : buildBasicEmailHtml(log.content)
   });
 }
@@ -1016,7 +1123,8 @@ async function sendInteraktWhatsapp(log: ReminderLog, due?: DueRecord) {
     log.recipient,
     due.matchedContactName || due.companyName || log.dealerCode || "Customer",
     formatCurrency(due.amount, due.currency),
-    due.dueDate ? formatDate(due.dueDate) : "Not available"
+    due.dueDate ? formatDate(due.dueDate) : "Not available",
+    due.invoiceNumber || "N/A"
   );
 }
 
