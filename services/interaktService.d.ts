@@ -1,7 +1,6 @@
 export function sendPaymentReminder(
   phoneNumber: string,
-  customerName: string,
-  amount: string,
-  dueDate: string,
-  invoiceNumber: string
+  bodyValues: string[],
+  mediaUrl?: string,
+  fileName?: string
 ): Promise<unknown>;

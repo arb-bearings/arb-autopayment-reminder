@@ -29,6 +29,8 @@ import {
   normalizeText
 } from "@/lib/utils";
 import { sendPaymentReminder } from "@/services/interaktService";
+import { generateOutstandingPDF } from "./pdf-generator";
+import { uploadPdfToGoogleDrive } from "@/services/googleDriveService";
 
 type ReminderContext = {
   due: DueRecord;
@@ -1114,18 +1116,47 @@ async function sendTwilioSms(log: ReminderLog, settings: DispatchSettings) {
   );
 }
 
-async function sendInteraktWhatsapp(log: ReminderLog, due?: DueRecord) {
+async function sendInteraktWhatsapp(
+  log: ReminderLog,
+  due?: DueRecord,
+  allDuesForDealer: DueRecord[] = []
+) {
   if (!due) {
     throw new Error("WhatsApp reminder requires an invoice record.");
   }
 
-  await sendPaymentReminder(
-    log.recipient,
-    due.matchedContactName || due.companyName || log.dealerCode || "Customer",
-    formatCurrency(due.amount, due.currency),
-    due.dueDate ? formatDate(due.dueDate) : "Not available",
-    due.invoiceNumber || "N/A"
+  // 1. Get all outstanding dues for this customer
+  const dealerDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
+  const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const currency = due.currency || "INR";
+  const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+  const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
+
+  // 2. Generate PDF statement document in-memory
+  const pdfBuffer = await generateOutstandingPDF(
+    customerName,
+    dealerCode,
+    dealerDues,
+    totalAmount,
+    currency
   );
+
+  // 3. Upload to Google Drive and get shareable public direct download link
+  const fileName = `outstanding-statement-${dealerCode}-${log.id}.pdf`;
+  const mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
+
+  // 4. Send WhatsApp Template
+  const contactName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+  const invoiceNumber = due.invoiceNumber || due.reference || "";
+  const formattedAmount = (due.amount || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  const overdueDays = (due.overdueDays || 0).toString();
+
+  const bodyValues = [contactName, invoiceNumber, formattedAmount, overdueDays];
+
+  await sendPaymentReminder(log.recipient, bodyValues, mediaUrl, `statement-${dealerCode}.pdf`);
 }
 
 async function deliverReminder(
@@ -1152,7 +1183,7 @@ async function deliverReminder(
     return "sent" as const;
   }
 
-  await sendInteraktWhatsapp(log, due);
+  await sendInteraktWhatsapp(log, due, allDuesForDealer);
   return "sent" as const;
 }
 

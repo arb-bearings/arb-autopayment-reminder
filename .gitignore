@@ -5,3 +5,5 @@ data
 *.tsbuildinfo
 .env
 .env.local
+
+google-credentials.json
