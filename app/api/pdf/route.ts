@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
       dealerCode,
       allDuesForDealer,
       totalAmount,
-      currency
+      currency,
+      undefined,
+      log.dueId
     );
 
     return new Response(new Uint8Array(pdfBuffer), {

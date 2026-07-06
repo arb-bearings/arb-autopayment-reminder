@@ -143,14 +143,15 @@ function getOlderUnpaidDues(due: DueRecord, allDuesForDealer: DueRecord[]) {
 }
 
 function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): PaymentSummary {
-  const previousDues = getOlderUnpaidDues(due, allDuesForDealer);
-  const previousDue = previousDues.reduce((sum, entry) => sum + entry.amount, 0);
-  const currentInvoiceDue = due.amount;
+  const totalDue = allDuesForDealer.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const currentInvoiceDue = due.amount || 0;
+  const previousDue = totalDue - currentInvoiceDue;
+  const previousDues = allDuesForDealer.filter((entry) => entry.id !== due.id);
 
   return {
     currentInvoiceDue,
     previousDue,
-    totalDue: currentInvoiceDue + previousDue,
+    totalDue,
     previousDues
   };
 }
@@ -180,6 +181,12 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     cdShortMessage: buildCashDiscountShortMessage(context.cdEvaluation),
     cdShortSummary: buildCashDiscountShortSummary(context.cdEvaluation),
     cdSummary: buildCashDiscountSummary(context.cdEvaluation),
+    // Appends " to avail the X% CD Benefit" if eligible, empty string if not.
+    // Used in templates: "pay by/before due date{{cdBenefitSuffix}}."
+    cdBenefitSuffix:
+      context.cdEvaluation.eligible && context.cdEvaluation.policy
+        ? ` to avail the ${context.cdEvaluation.policy.discountPercent}% CD Benefit`
+        : "",
     companyName: context.due.companyName,
     company_name: context.due.companyName,
     contactName:
@@ -314,12 +321,12 @@ function composeReminderContent(
       channel === "email"
         ? [
             "",
-            "Payment Summary:",
-            `Current invoice due: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`,
-            `Previous due: ${formatCurrency(paymentSummary.previousDue, currency)}`,
-            `Total due: ${formatCurrency(paymentSummary.totalDue, currency)}`
+            "Outstanding Summary:",
+            `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
+            `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
+            `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
           ].join("\n")
-        : ` Current invoice due: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}. Previous due: ${formatCurrency(paymentSummary.previousDue, currency)}. Total due: ${formatCurrency(paymentSummary.totalDue, currency)}.`;
+        : ` Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}. Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}. Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}.`;
 
     return channel === "email"
       ? `${filledTemplate}\n${paymentSummaryText}`.trim()
@@ -347,21 +354,93 @@ function buildBasicEmailHtml(content: string) {
   `;
 }
 
-function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDealer: DueRecord[]) {
+function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDealer: DueRecord[], database?: any) {
   const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
   const currency = due.currency || "INR";
-  const previousRows = paymentSummary.previousDues.map((entry) => `
-    <tr>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;">${escapeHtml(entry.invoiceNumber || entry.reference || "N/A")}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.billDate ? formatDate(entry.billDate) : "Not available")}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#111827;">${escapeHtml(formatCurrency(entry.amount, entry.currency || currency))}</td>
+
+  // All invoices for this dealer (for the invoice table)
+  // Sort by bill date ascending so oldest appears first
+  const sortedDealerDues = [...allDuesForDealer].sort((a, b) =>
+    (a.billDate || a.invoiceDate || "").localeCompare(b.billDate || b.invoiceDate || "")
+  );
+
+  const referenceDate = log.sentAt ? new Date(log.sentAt) : (log.createdAt ? new Date(log.createdAt) : new Date());
+
+  const invoiceRows = sortedDealerDues.map((entry) => {
+    const isCurrent = entry.id === due.id;
+    const rowBg = isCurrent ? "background:#fefce8;" : "";
+    const fontWeight = isCurrent ? "font-weight:700;" : "";
+    const billAge = getBillAgeDays(entry.billDate || entry.invoiceDate, referenceDate);
+    const ageText = billAge !== null ? `${billAge} days` : "N/A";
+
+    return `
+    <tr style="${rowBg}">
+      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;${fontWeight}">${escapeHtml(entry.billDate ? formatDate(entry.billDate) : (entry.invoiceDate ? formatDate(entry.invoiceDate) : "N/A"))}</td>
+      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;${fontWeight}">${escapeHtml(entry.invoiceNumber || entry.reference || "N/A")}</td>
+      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;${fontWeight}">${escapeHtml(ageText)}</td>
+      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;${fontWeight}">${escapeHtml(formatCurrency(entry.amount, entry.currency || currency))}</td>
     </tr>
-  `);
+  `;
+  });
+
   const bodyHtml = log.content
     .split(/\n{2,}/)
-    .filter((paragraph) => !/^Payment Summary:/i.test(paragraph.trim()))
+    .filter((paragraph) => !/^(Payment Summary|Outstanding Summary):/i.test(paragraph.trim()))
+    .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()))
     .map((paragraph) => `<p style="margin:0 0 14px;line-height:1.55;color:#374151;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
     .join("");
+
+  // Dynamically calculate trigger day brackets
+  const rules = database?.reminderRules;
+  const activeTriggerDays: number[] = Array.from(
+    new Set<number>(
+      ((rules || []) as any[])
+        .filter((r: any) => r.enabled)
+        .map((r: any) => r.triggerDay as number)
+        .filter((day: any) => typeof day === "number")
+    )
+  ).sort((a, b) => a - b); // ascending
+
+  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90];
+
+  const currentRule = rules?.find((r: any) => r.id === log.ruleId);
+  // Use log.reminderDay (= rule.triggerDay stored at creation) as fallback — more reliable than billAgeDays
+  const currentRuleDay = currentRule ? currentRule.triggerDay : (log.reminderDay || log.billAgeDays || 30);
+
+  const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
+  const nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
+    ? sortedTriggerDays[currentIdx + 1]
+    : 120; // default to 120 / 90+ if last
+
+  const today = referenceDate;
+  const getAmountForTriggerDay = (day: number) => {
+    const idx = sortedTriggerDays.indexOf(day);
+    if (idx === -1) {
+      return day === currentRuleDay ? due.amount : 0;
+    }
+    const minAge = idx === 0 ? -Infinity : sortedTriggerDays[idx - 1] + 1;
+    const maxAge = idx === sortedTriggerDays.length - 1 ? Infinity : day;
+
+    return allDuesForDealer
+      .filter((entry) => {
+        const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+        const nominalAge = age + 5; // engine offset: rule triggers 5 days before nominal day
+        return nominalAge >= minAge && nominalAge <= maxAge;
+      })
+      .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  };
+
+  const box2Amount = getAmountForTriggerDay(currentRuleDay);
+  const box3Amount = getAmountForTriggerDay(nextRuleDay);
+  const calculatedTotalOutstanding = box2Amount + box3Amount;
+
+  const isBox2Cd = currentRuleDay <= 60;
+  const box2Label = `Payment Due in ${currentRuleDay} Days${isBox2Cd ? " (for CD)" : ""}`;
+
+  const isBox3Cd = nextRuleDay <= 60;
+  const box3Label = nextRuleDay > 90
+    ? `Payment Due in 90+ Days`
+    : `Payment Due in ${nextRuleDay} Days${isBox3Cd ? " (for CD)" : ""}`;
 
   return `
     <!doctype html>
@@ -375,24 +454,26 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
               <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || due.dealerCode || "Customer")}</div>
             </div>
             <div style="padding:22px 26px;">
+
+              <!-- Outstanding Summary: Box 1 (Current Rule) → Box 2 (Next Rule) → Box 3 (Total Outstanding as sum of both) -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 -8px 18px;">
                 <tr>
                   <td style="width:33.33%;padding:8px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Current Invoice Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#111827;">${escapeHtml(formatCurrency(paymentSummary.currentInvoiceDue, currency))}</div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
+                      <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">${escapeHtml(box2Label)}</div>
+                      <div style="font-size:18px;font-weight:800;margin-top:6px;color:#111827;">${escapeHtml(formatCurrency(box2Amount, currency))}</div>
                     </div>
                   </td>
                   <td style="width:33.33%;padding:8px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Previous Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#b45309;">${escapeHtml(formatCurrency(paymentSummary.previousDue, currency))}</div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
+                      <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">${escapeHtml(box3Label)}</div>
+                      <div style="font-size:18px;font-weight:800;margin-top:6px;color:#b45309;">${escapeHtml(formatCurrency(box3Amount, currency))}</div>
                     </div>
                   </td>
                   <td style="width:33.33%;padding:8px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;font-weight:800;text-transform:uppercase;">Total Due</div>
-                      <div style="font-size:22px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
+                      <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:18px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(formatCurrency(calculatedTotalOutstanding, currency))}</div>
                     </div>
                   </td>
                 </tr>
@@ -402,41 +483,26 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
                 ${bodyHtml}
               </div>
 
-              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Invoice Details</h2>
+              <!-- Invoice Table: all invoices for this dealer code -->
+              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Invoice Table</h2>
               <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                <thead>
+                  <tr style="background:#f9fafb;">
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice Date</th>
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice Number</th>
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Days Aged</th>
+                    <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Outstanding</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Invoice Number</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;font-weight:700;">${escapeHtml(due.invoiceNumber || due.reference || "N/A")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Dealer Code</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeHtml(due.dealerCode || due.customerCode || "N/A")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Bill Date</td>
-                    <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeHtml(due.billDate ? formatDate(due.billDate) : "Not available")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:11px 13px;color:#6b7280;font-weight:700;">Due Date</td>
-                    <td style="padding:11px 13px;color:#111827;">${escapeHtml(due.dueDate ? formatDate(due.dueDate) : "Not available")}</td>
+                  ${invoiceRows.join("") || `<tr><td colspan="4" style="padding:14px;color:#6b7280;">No invoices found for this dealer code.</td></tr>`}
+                  <tr style="background:#f9fafb;font-weight:bold;border-top:2px solid #e5e7eb;">
+                    <td colspan="3" style="padding:11px 13px;color:#111827;font-weight:800;">Total Outstanding</td>
+                    <td style="padding:11px 13px;text-align:right;color:#0f766e;font-weight:800;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</td>
                   </tr>
                 </tbody>
               </table>
 
-              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Previous Due Breakdown</h2>
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-                <thead>
-                  <tr style="background:#f9fafb;">
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Bill Date</th>
-                    <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${previousRows.join("") || `<tr><td colspan="3" style="padding:14px;color:#6b7280;">No previous dues found for this dealer code.</td></tr>`}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
@@ -620,7 +686,8 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       );
 
       for (const rule of rules) {
-        if (billAgeDays !== rule.triggerDay) {
+        // Fire 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is 25 days old)
+        if (billAgeDays !== (rule.triggerDay - 5)) {
           continue;
         }
 
@@ -881,12 +948,17 @@ async function sendEmail(
   log: ReminderLog,
   settings: DispatchSettings,
   due?: DueRecord,
-  allDuesForDealer: DueRecord[] = []
+  allDuesForDealer: DueRecord[] = [],
+  database?: any,
+  pdfBuffer?: Buffer
 ) {
   const transporter = nodemailer.createTransport({
     host: settings.smtpHost,
     port: settings.smtpPort,
     secure: settings.smtpSecure,
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
     auth: settings.smtpUser
       ? {
           user: settings.smtpUser,
@@ -895,12 +967,20 @@ async function sendEmail(
       : undefined
   });
 
+  const attachments = pdfBuffer && due ? [
+    {
+      filename: `outstanding-statement-${due.dealerCode || due.customerCode || "statement"}.pdf`,
+      content: pdfBuffer
+    }
+  ] : undefined;
+
   await transporter.sendMail({
     from: settings.senderEmail || settings.smtpFrom,
     to: log.recipient,
     subject: log.subject,
     text: log.content,
-    html: due ? buildReminderEmailHtml(log, due, allDuesForDealer) : buildBasicEmailHtml(log.content)
+    html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content),
+    attachments
   });
 }
 
@@ -1009,36 +1089,107 @@ async function sendTwilioSms(log: ReminderLog, settings: DispatchSettings) {
   );
 }
 
+async function getEmailContentForLog(
+  log: ReminderLog,
+  due: DueRecord,
+  allDuesForDealer: DueRecord[],
+  database: any
+): Promise<string> {
+  const rule = database.reminderRules.find((r: any) => r.id === log.ruleId);
+  const template = database.templates.find((t: any) => t.id === log.templateId);
+  const contact = database.masterContacts.find((c: any) => c.id === log.contactId) || {
+    id: log.contactId,
+    ownerId: log.ownerId,
+    dealerCode: log.dealerCode,
+    companyName: due.companyName,
+    primaryContact: due.matchedContactName || "Accounts Team",
+    email: log.recipient,
+    whatsapp: log.recipient,
+    sms: log.recipient,
+    alternateContact: "",
+    notes: "",
+    importedAt: ""
+  };
+
+  if (!rule || !template) {
+    return log.content; // fallback
+  }
+
+  const policies = database.cashDiscountPolicies.filter(
+    (entry: any) => entry.ownerId === log.ownerId || entry.ownerId === due.ownerId
+  );
+  
+  const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
+  const cdEvaluation = evaluateCashDiscountEligibility(
+    due,
+    allDuesForDealer,
+    policies,
+    new Date()
+  );
+
+  // Find sender company name from workspace users
+  const workspaceUser = database.users.find((u: any) => u.companyName);
+  const senderCompany = workspaceUser?.companyName || "Your Company";
+
+  const replacements = buildReplacements(
+    { due, contact, rule, template, cdEvaluation, billAgeDays: log.billAgeDays, paymentSummary },
+    senderCompany
+  );
+
+  return fillTemplate(template.emailBody, replacements);
+}
+
 async function sendInteraktWhatsapp(
   log: ReminderLog,
   due?: DueRecord,
-  allDuesForDealer: DueRecord[] = []
+  allDuesForDealer: DueRecord[] = [],
+  database?: any
 ) {
   if (!due) {
     throw new Error("WhatsApp reminder requires an invoice record.");
   }
 
-  // 1. Get all outstanding dues for this customer
-  const dealerDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
+  // 1. Get all outstanding dues for this customer and sort them chronologically (oldest first)
+  const unsortedDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
+  const dealerDues = [...unsortedDues].sort((a, b) => {
+    const dateA = a.billDate || a.invoiceDate || "";
+    const dateB = b.billDate || b.invoiceDate || "";
+    return dateA.localeCompare(dateB);
+  });
   const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
   const currency = due.currency || "INR";
   const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
   const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
-  // 2. Generate PDF Statement document in-memory
+  // 2. Fetch the corresponding email template content so the PDF has the exact email message body
+  let pdfMessageBody = log.content;
+  if (database) {
+    try {
+      pdfMessageBody = await getEmailContentForLog(log, due, dealerDues, database);
+    } catch (e) {
+      console.error("Failed to generate email content for WhatsApp PDF:", e);
+    }
+  }
+
+  // Generate PDF — includes the same reminder message text as the email
   const pdfBuffer = await generateOutstandingPDF(
     customerName,
     dealerCode,
     dealerDues,
     totalAmount,
-    currency
+    currency,
+    pdfMessageBody,
+    log.dueId,
+    log.ruleId,
+    database
   );
 
   // 3. Upload to Google Drive and get shareable public direct download link
   const fileName = `outstanding-statement-${dealerCode}-${log.id}.pdf`;
   const mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
+  log.pdfUrl = mediaUrl;
 
-  // 4. Send WhatsApp Template
+  // 4. Send WhatsApp with the PDF document
   const contactName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
   const invoiceNumber = due.invoiceNumber || due.reference || "";
   const formattedAmount = (due.amount || 0).toLocaleString("en-IN", {
@@ -1049,14 +1200,15 @@ async function sendInteraktWhatsapp(
 
   const bodyValues = [contactName, invoiceNumber, formattedAmount, overdueDays];
 
-  await sendPaymentReminder(log.recipient, bodyValues, mediaUrl, `statement-${dealerCode}.pdf`);
+  await sendPaymentReminder(log.recipient, bodyValues, mediaUrl, `statement.pdf`);
 }
 
 async function deliverReminder(
   log: ReminderLog,
   settings: DispatchSettings,
   due?: DueRecord,
-  allDuesForDealer: DueRecord[] = []
+  allDuesForDealer: DueRecord[] = [],
+  database?: any
 ) {
   if (log.channel === "email") {
     if (!isValidEmailAddress(log.recipient)) {
@@ -1067,7 +1219,48 @@ async function deliverReminder(
       throw new Error("SMTP settings are incomplete.");
     }
 
-    await sendEmail(log, settings, due, allDuesForDealer);
+    let pdfBuffer: Buffer | undefined;
+    let pdfUrl: string | undefined;
+
+    if (due) {
+      const unsortedDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
+      const dealerDues = [...unsortedDues].sort((a, b) => {
+        const dateA = a.billDate || a.invoiceDate || "";
+        const dateB = b.billDate || b.invoiceDate || "";
+        return dateA.localeCompare(dateB);
+      });
+      const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const currency = due.currency || "INR";
+      const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+      const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
+
+      let pdfMessageBody = log.content;
+      if (database) {
+        try {
+          pdfMessageBody = await getEmailContentForLog(log, due, dealerDues, database);
+        } catch (e) {
+          console.error("Failed to generate email content for PDF:", e);
+        }
+      }
+
+      pdfBuffer = await generateOutstandingPDF(
+        customerName,
+        dealerCode,
+        dealerDues,
+        totalAmount,
+        currency,
+        pdfMessageBody,
+        log.dueId,
+        log.ruleId,
+        database
+      );
+
+      const fileName = `outstanding-statement-${dealerCode}-${log.id}.pdf`;
+      pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
+      log.pdfUrl = pdfUrl;
+    }
+
+    await sendEmail(log, settings, due, allDuesForDealer, database, pdfBuffer);
     return "sent" as const;
   }
 
@@ -1076,7 +1269,7 @@ async function deliverReminder(
     return "sent" as const;
   }
 
-  await sendInteraktWhatsapp(log, due, allDuesForDealer);
+  await sendInteraktWhatsapp(log, due, allDuesForDealer, database);
   return "sent" as const;
 }
 
@@ -1112,7 +1305,7 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
               (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
             )
           : [];
-        const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer);
+        const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database);
         log.status = status;
         log.sentAt = new Date().toISOString();
         log.failureReason = "";

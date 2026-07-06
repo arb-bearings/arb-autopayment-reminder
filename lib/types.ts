@@ -187,6 +187,7 @@ export type ReminderLog = {
   failureReason: string;
   sentAt: string;
   createdAt: string;
+  pdfUrl?: string;
 };
 
 export type OperationPasswordKey =

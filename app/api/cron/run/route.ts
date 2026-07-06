@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCompanyWorkspaceContext } from "@/lib/company-workspace";
 import { generateRemindersForUser, sendPendingReminders } from "@/lib/reminder-engine";
-import { sendDailyActivityReport } from "@/lib/reports";
+import { sendDailyActivityReport, sendSalespersonSummaries } from "@/lib/reports";
 import { readDatabase } from "@/lib/storage";
 
 export async function POST(request: Request) {
@@ -32,8 +32,21 @@ export async function POST(request: Request) {
         (entry) => entry.ownerId === workspace.configOwnerId && entry.enabled && entry.autoSend
       )
       .map((entry) => entry.id);
-    const processed =
-      autoSendRuleIds.length > 0 ? (await sendPendingReminders(user.id, autoSendRuleIds)).length : 0;
+    let sentLogs: Awaited<ReturnType<typeof sendPendingReminders>> = [];
+    if (autoSendRuleIds.length > 0) {
+      sentLogs = await sendPendingReminders(user.id, autoSendRuleIds);
+    }
+    const processed = sentLogs.length;
+
+    // Send salesperson summaries if any reminders were dispatched
+    if (processed > 0) {
+      try {
+        await sendSalespersonSummaries(user, sentLogs);
+      } catch (err) {
+        console.error(`Cron: failed to send salesperson summaries for ${user.email}:`, err);
+      }
+    }
+
     const settings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
     let report = "skipped";
 

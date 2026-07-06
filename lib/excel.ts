@@ -162,8 +162,9 @@ const dueFieldCandidates = {
     "posting date"
   ],
   dueDate: ["due date", "payment due date", "reminder date", "due dt", "due on"],
-  openingAmount: ["opening amount", "opening amt", "opening balance"],
+  openingAmount: ["opening amount", "opening amt", "opening balance", "opening"],
   amount: [
+    "pending",           // ← user's actual Excel column name
     "pending amount",
     "pending amt",
     "amount",
@@ -175,10 +176,27 @@ const dueFieldCandidates = {
     "balance amount",
     "outstanding",
     "outstanding amount",
-    "pending amount"
+    "outstanding amt",
+    // Tally and Indian ERP exports
+    "closing balance",
+    "closing amt",
+    "closing amount",
+    "balance",
+    "net balance",
+    "debit balance",
+    "dr balance",
+    "dr amount",
+    "dr amt",
+    "net receivable",
+    "receivable amount",
+    "receivable",
+    "amount due",
+    "net due",
+    "payable amount",
+    "credit amount"
   ],
   currency: ["currency"],
-  overdueDays: ["overdue by days", "overdue by day", "overdue days", "ageing days"],
+  overdueDays: ["overdue by days", "overdue by day", "overdue days", "ageing days", "overdue"],
   reference: ["reference", "reference number", "po number", "po no"],
   notes: ["notes", "remarks", "comment"],
   totalDueAmount: ["total due amount", "total outstanding amount", "total outstanding", "total_due_amount"],

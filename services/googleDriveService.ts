@@ -68,23 +68,38 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
     }
   });
 
-  // 3. Get the webContentLink which is a direct download URL that serves the actual file
-  // with proper Content-Type headers (application/pdf)
-  const fileInfo = await drive.files.get({
-    fileId: fileId,
-    fields: "webContentLink"
-  });
+  // 3. Upload to tmpfiles.org to get a direct, unthrottled URL with correct Content-Type.
+  //
+  // Google Drive downloads from /uc are heavily rate-limited and served with captcha warning pages
+  // to automated cloud crawlers (like WhatsApp/Interakt's servers), which turns the PDF into
+  // a corrupt .bin file on user's phones.
+  //
+  // Hosting the PDF on tmpfiles.org guarantees a direct PDF stream with "Content-Type: application/pdf",
+  // so WhatsApp represents it as a proper openable PDF.
+  try {
+    const formData = new FormData();
+    const fileBlob = new Blob([new Uint8Array(pdfBuffer)], { type: "application/pdf" });
+    formData.append("file", fileBlob, fileName);
 
-  const webContentLink = fileInfo.data.webContentLink;
-
-  if (webContentLink) {
-    // webContentLink is a direct download link like:
-    // https://drive.google.com/uc?id=FILE_ID&export=download
-    // This works better than manually constructing the URL as it properly serves the PDF
-    return webContentLink;
+    const uploadRes = await fetch("https://tmpfiles.org/api/v1/upload", {
+      method: "POST",
+      body: formData
+    });
+    
+    if (uploadRes.ok) {
+      const resJson = await uploadRes.json();
+      if (resJson && resJson.status === "success" && resJson.data && resJson.data.url) {
+        // Direct download URL is obtained by replacing the domain path with /dl/
+        const directUrl = resJson.data.url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/");
+        console.log(`Successfully uploaded PDF to tmpfiles.org. Direct URL: ${directUrl}`);
+        return directUrl;
+      }
+    }
+    console.error("tmpfiles.org upload failed with status:", uploadRes.status);
+  } catch (err) {
+    console.error("Failed to upload PDF statement to tmpfiles.org:", err);
   }
 
-  // Fallback: Use the Google Drive API direct media endpoint
-  // This URL directly serves the file bytes with correct Content-Type
-  return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${process.env.GOOGLE_API_KEY || ""}`;
+  // Fallback: Google Drive uc download URL with filename parameter
+  return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}&filename=${encodeURIComponent(fileName)}`;
 }

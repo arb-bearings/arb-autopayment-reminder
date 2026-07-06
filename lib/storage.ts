@@ -376,6 +376,100 @@ async function ensureDatabaseDocument() {
   return collection;
 }
 
+// ─── Template Migration ───────────────────────────────────────────────────────
+// Runs automatically on every readDatabase() call.
+// Detects old default template format and replaces with new format.
+// Idempotent: new-format templates are never re-migrated.
+
+function buildMigratedEmailBody(triggerDay: number): string {
+  const base = `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\n`;
+  const footer = `\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+
+  switch (triggerDay) {
+    case 30:
+    case 45:
+      return base +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\nSo kindly arrange to remit us the payment by/before the due date{{cdBenefitSuffix}}.` +
+        footer;
+    case 60:
+      return base +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\nSo kindly arrange to remit us the payment by/before the due date.` +
+        footer;
+    case 75:
+      return base +
+        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at earliest possible.` +
+        footer;
+    case 80:
+      return base +
+        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
+        footer;
+    case 85:
+      return base +
+        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at most urgent basis.` +
+        footer;
+    case 90:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
+    default:
+      return ""; // Unknown trigger day — skip migration
+  }
+}
+
+function buildMigratedEmailSubject(triggerDay: number): string {
+  if (triggerDay <= 60) return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
+  if (triggerDay === 90) return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
+  return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
+}
+
+function buildMigratedWhatsappBody(triggerDay: number): string {
+  switch (triggerDay) {
+    case 30:
+    case 45:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+    case 60:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Please pay before the due date. — {{senderCompany}}`;
+    case 75:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Please pay at earliest possible. — {{senderCompany}}`;
+    case 80:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — {{senderCompany}}`;
+    case 85:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
+    case 90:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
+    default:
+      return ""; // Unknown trigger day — skip migration
+  }
+}
+
+function migrateTemplates(db: AppDatabase): AppDatabase {
+  // Build a map from templateId → rule so we can look up triggerDay per template
+  const ruleByTemplateId = new Map(db.reminderRules.map((rule) => [rule.templateId, rule]));
+
+  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90]);
+
+  const migratedTemplates = db.templates.map((template) => {
+    const rule = ruleByTemplateId.get(template.id);
+    if (!rule) return template; // No linked rule — leave untouched
+
+    // Only apply canonical body for known standard trigger days.
+    // Unknown trigger days (custom rules) are left as-is.
+    if (!knownTriggerDays.has(rule.triggerDay)) return template;
+
+    const newEmailBody = buildMigratedEmailBody(rule.triggerDay);
+    const newWhatsappBody = buildMigratedWhatsappBody(rule.triggerDay);
+    if (!newEmailBody) return template;
+
+    return {
+      ...template,
+      emailSubject: buildMigratedEmailSubject(rule.triggerDay),
+      emailBody: newEmailBody,
+      whatsappBody: newWhatsappBody || template.whatsappBody,
+      smsBody: newWhatsappBody || template.smsBody
+    };
+  });
+
+  return { ...db, templates: migratedTemplates };
+}
+
 export async function readDatabase() {
   const collection = await ensureDatabaseDocument();
   const document = await collection.findOne({ _id: documentId });
@@ -385,7 +479,8 @@ export async function readDatabase() {
   }
 
   const { _id, migratedFromFileAt, updatedAt, ...appDatabase } = document;
-  return normalizeDatabase(appDatabase);
+  // Normalize then apply auto-migration for old-format templates
+  return migrateTemplates(normalizeDatabase(appDatabase));
 }
 
 export async function writeDatabase(database: AppDatabase) {
