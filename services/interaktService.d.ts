@@ -4,3 +4,10 @@ export function sendPaymentReminder(
   mediaUrl?: string,
   fileName?: string
 ): Promise<unknown>;
+
+export function sendSalespersonSummaryWhatsapp(
+  phoneNumber: string,
+  salespersonName: string,
+  totalOutstanding: string,
+  mediaUrl?: string
+): Promise<unknown>;

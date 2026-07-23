@@ -38,10 +38,13 @@ export async function POST(request: Request) {
     }
     const processed = sentLogs.length;
 
-    // Send salesperson summaries if any reminders were dispatched
-    if (processed > 0) {
+    // Send salesperson summaries if any reminders were dispatched (including auto-sent)
+    const sentDuringGeneration = generated.filter((entry) => entry.status === "sent");
+    const totalDispatched = [...sentDuringGeneration, ...sentLogs];
+
+    if (totalDispatched.length > 0) {
       try {
-        await sendSalespersonSummaries(user, sentLogs);
+        await sendSalespersonSummaries(user, totalDispatched);
       } catch (err) {
         console.error(`Cron: failed to send salesperson summaries for ${user.email}:`, err);
       }

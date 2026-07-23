@@ -387,13 +387,21 @@ function buildMigratedEmailBody(triggerDay: number): string {
 
   switch (triggerDay) {
     case 30:
+      return base +
+        `Payment Due in 30 Days (For CD)\n\n` +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
+        `So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.` +
+        footer;
     case 45:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\nSo kindly arrange to remit us the payment by/before the due date{{cdBenefitSuffix}}.` +
+        `Payment Due in 45 Days (For CD)\n\n` +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
+        `So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.` +
         footer;
     case 60:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\nSo kindly arrange to remit us the payment by/before the due date.` +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
+        `So kindly arrange to remit us the payment by/before the due date, as per ARB’s Payment Terms.` +
         footer;
     case 75:
       return base +
@@ -409,6 +417,10 @@ function buildMigratedEmailBody(triggerDay: number): string {
         footer;
     case 90:
       return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
+    case 95:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+    case 100:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -416,7 +428,8 @@ function buildMigratedEmailBody(triggerDay: number): string {
 
 function buildMigratedEmailSubject(triggerDay: number): string {
   if (triggerDay <= 60) return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
-  if (triggerDay === 90) return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
+  if (triggerDay === 90 || triggerDay === 95) return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
+  if (triggerDay === 100) return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
   return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
 }
 
@@ -435,6 +448,10 @@ function buildMigratedWhatsappBody(triggerDay: number): string {
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
     case 90:
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
+    case 95:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped effective today. — {{senderCompany}}`;
+    case 100:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -444,7 +461,7 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
   // Build a map from templateId → rule so we can look up triggerDay per template
   const ruleByTemplateId = new Map(db.reminderRules.map((rule) => [rule.templateId, rule]));
 
-  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90]);
+  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100]);
 
   const migratedTemplates = db.templates.map((template) => {
     const rule = ruleByTemplateId.get(template.id);

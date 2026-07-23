@@ -6,6 +6,7 @@ import { ProtectedSubmitButton } from "@/components/protected-submit-button";
 import { TableSearch } from "@/components/table-search";
 import { filterSharedCompanyRecords, getCompanyWorkspaceContextForUser } from "@/lib/company-workspace";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
+import { GroupedDuesTable } from "@/components/grouped-dues-table";
 import { canDispatchReminders } from "@/lib/access-control";
 import { isAdminUser, requireUser } from "@/lib/auth";
 import { readDatabase } from "@/lib/storage";
@@ -185,8 +186,6 @@ export default async function DuesPage({
             </p>
           </div>
 
-          <TableSearch />
-
           {canDispatch && sendableDueRecords.length > 0 && rules.length > 0 ? (
             <form action="/api/reminders/send" method="post" className="dispatch-form">
               <input type="hidden" name="bulkSelection" value="selected" />
@@ -229,57 +228,11 @@ export default async function DuesPage({
                 check the visible matching rows.
               </p>
 
-          <div className="table-wrap">
-            <table data-searchable-table>
-              <thead>
-                <tr>
-                      <th>Select</th>
-                  <th>No.</th>
-                      <th>Dealer code</th>
-                  <th>Company</th>
-                  <th>Invoice</th>
-                  <th>Bill age</th>
-                  <th>Overdue</th>
-                  <th>Contact match</th>
-                      <th>Salesperson</th>
-                  <th>Due date</th>
-                  <th>Pending</th>
-                      <th>Total due</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dueRecords.length === 0 ? (
-                  <tr>
-                        <td colSpan={12}>Upload a dues file to preview the active records.</td>
-                  </tr>
-                ) : (
-                      dueRecords.map((due, index) => (
-                    <tr key={due.id}>
-                          <td>
-                            <input
-                              name="dueIds"
-                              type="checkbox"
-                              value={due.id}
-                              disabled={!findMatchingMasterContact(due, masterContacts)}
-                            />
-                          </td>
-                      <td>{index + 1}</td>
-                          <td>{due.dealerCode || due.customerCode || "N/A"}</td>
-                      <td>{due.companyName}</td>
-                      <td>{due.invoiceNumber || due.reference || "N/A"}</td>
-                      <td>{formatElapsedDaysTag(due.billDate || due.invoiceDate)}</td>
-                      <td>{due.overdueDays > 0 ? `${due.overdueDays} days` : "Current"}</td>
-                      <td>{due.contactMatchStatus === "matched" ? "Matched" : "Missing"}</td>
-                          <td>{due.salespersonName || due.salespersonEmail || "Unassigned"}</td>
-                      <td>{formatDate(due.dueDate)}</td>
-                      <td>{formatCurrency(due.amount, due.currency)}</td>
-                          <td>{formatCurrency(due.totalDueAmount || due.amount, due.currency)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+              <GroupedDuesTable
+                dueRecords={dueRecords}
+                masterContacts={masterContacts}
+                canDispatch={true}
+              />
 
               <ProtectedSubmitButton
                 className="button"
@@ -289,42 +242,11 @@ export default async function DuesPage({
               </ProtectedSubmitButton>
             </form>
           ) : (
-            <div className="table-wrap">
-              <table data-searchable-table>
-                <thead>
-                  <tr>
-                    <th>No.</th>
-                    <th>Dealer code</th>
-                    <th>Company</th>
-                    <th>Invoice</th>
-                    <th>Salesperson</th>
-                    <th>Contact match</th>
-                    <th>Pending</th>
-                    <th>Total due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dueRecords.length === 0 ? (
-                    <tr>
-                      <td colSpan={8}>Upload a dues file to preview the active records.</td>
-                    </tr>
-                  ) : (
-                    dueRecords.map((due, index) => (
-                      <tr key={due.id}>
-                        <td>{index + 1}</td>
-                        <td>{due.dealerCode || due.customerCode || "N/A"}</td>
-                        <td>{due.companyName}</td>
-                        <td>{due.invoiceNumber || due.reference || "N/A"}</td>
-                        <td>{due.salespersonName || due.salespersonEmail || "Unassigned"}</td>
-                        <td>{due.contactMatchStatus === "matched" ? "Matched" : "Missing"}</td>
-                        <td>{formatCurrency(due.amount, due.currency)}</td>
-                        <td>{formatCurrency(due.totalDueAmount || due.amount, due.currency)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <GroupedDuesTable
+              dueRecords={dueRecords}
+              masterContacts={masterContacts}
+              canDispatch={false}
+            />
           )}
         </article>
 

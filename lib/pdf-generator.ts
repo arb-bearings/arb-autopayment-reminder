@@ -72,8 +72,7 @@ export function generateOutstandingPDF(
       doc.font("Helvetica")
          .fontSize(10)
          .fillColor(textColor)
-         .text(`Company Name : ${customerName}`, 50, 130)
-         .text(`Dealer Code  : ${dealerCode}`, 50, 145);
+         .text(`Company Name : ${customerName}`, 50, 130);
 
       // ── 3. Three Summary Boxes (Total → Current Rule → Next Rule) ───────────
       const rules = database?.reminderRules;
@@ -86,7 +85,7 @@ export function generateOutstandingPDF(
         )
       ).sort((a, b) => a - b); // ascending
 
-      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90];
+      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100];
 
       // Find current rule trigger day
       const currentRule = rules?.find((r: any) => r.id === ruleId);
@@ -122,13 +121,12 @@ export function generateOutstandingPDF(
       const box2Amount = getAmountForTriggerDay(currentRuleDay);
       const box3Amount = getAmountForTriggerDay(nextRuleDay);
 
-      const isBox2Cd = currentRuleDay <= 60;
+      const isBox2Cd = currentRuleDay <= 45;
       const box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS${isBox2Cd ? " (for CD)" : ""}`;
 
-      const isBox3Cd = nextRuleDay <= 60;
       const box3Label = nextRuleDay > 90
         ? `PAYMENT DUE IN 90+ DAYS`
-        : `PAYMENT DUE IN ${nextRuleDay} DAYS${isBox3Cd ? " (for CD)" : ""}`;
+        : `PAYMENT DUE IN ${nextRuleDay} DAYS`;
 
       const calculatedTotalOutstanding = box2Amount + box3Amount;
 
@@ -371,6 +369,337 @@ export function generateOutstandingPDF(
            footerY + 10,
            { align: "center" }
          );
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export function generateSalespersonSummaryPDF(
+  name: string,
+  dues: DueRecord[],
+  sentLogs: any[],
+  rules: any[]
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+      const chunks: Buffer[] = [];
+
+      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", (err) => reject(err));
+
+      const primaryColor   = "#0f766e"; // Teal matching salesperson summary color
+      const secondaryColor = "#64748b";
+      const textColor      = "#0f172a";
+      const borderColor    = "#cbd5e1";
+
+      // 1. Title / Header
+      doc.fillColor(primaryColor)
+         .fontSize(20)
+         .font("Helvetica-Bold")
+         .text("SALESPERSON REMINDER SUMMARY", 50, 50);
+
+      doc.fontSize(8)
+         .font("Helvetica")
+         .fillColor(secondaryColor)
+         .text(`Report Date: ${formatDate(new Date().toISOString())}`, 50, 75);
+
+      // Metadata section
+      doc.strokeColor(borderColor)
+         .lineWidth(0.5)
+         .moveTo(50, 95)
+         .lineTo(545, 95)
+         .stroke();
+
+      doc.fillColor(textColor)
+         .font("Helvetica-Bold")
+         .fontSize(11)
+         .text(`Salesperson: ${name}`, 50, 105);
+
+      // Summary Table metrics
+      const uniqueDealers = Array.from(new Set(dues.map(d => d.companyName || d.dealerCode).filter(Boolean)));
+      const totalOutstanding = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+      const currency = dues[0]?.currency || "INR";
+
+      const cdLogs = sentLogs.filter(log => log.cdEligible);
+      const cdDueIds = new Set(cdLogs.map(log => log.dueId).filter(Boolean));
+      const cdDues = dues.filter(due => cdDueIds.has(due.id));
+      const cdOutstanding = cdDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+      const over90Logs = sentLogs.filter(log => (log.reminderDay || 0) > 90);
+      const over90DueIds = new Set(over90Logs.map(log => log.dueId).filter(Boolean));
+      const over90Dues = dues.filter(due => over90DueIds.has(due.id));
+      const over90Outstanding = over90Dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+      // Render Summary Table
+      let currentY = 125;
+      
+      // Draw Table background
+      doc.rect(50, currentY, 495, 18)
+         .fillColor("#f8fafc")
+         .fill();
+
+      doc.fillColor(textColor)
+         .font("Helvetica-Bold")
+         .fontSize(8.5);
+
+      doc.text("Metric", 60, currentY + 5, { width: 230 });
+      doc.text("Count", 300, currentY + 5, { width: 80, align: "center" });
+      doc.text("Outstanding", 400, currentY + 5, { width: 135, align: "right" });
+
+      doc.strokeColor(borderColor)
+         .lineWidth(0.5)
+         .moveTo(50, currentY + 18)
+         .lineTo(545, currentY + 18)
+         .stroke();
+
+      currentY += 18;
+
+      // Row 1: Total Assigned Dealers
+      doc.fillColor(textColor)
+         .font("Helvetica")
+         .fontSize(8)
+         .text("Total Assigned Dealers", 60, currentY + 5)
+         .text(uniqueDealers.length.toString(), 300, currentY + 5, { width: 80, align: "center" })
+         .text(formatCurrencyForPdf(totalOutstanding, currency), 400, currentY + 5, { width: 135, align: "right" });
+
+      currentY += 18;
+      doc.strokeColor("#f1f5f9")
+         .lineWidth(0.5)
+         .moveTo(50, currentY)
+         .lineTo(545, currentY)
+         .stroke();
+
+      // Row 2: Due in CD
+      doc.text("Due in CD", 60, currentY + 5)
+         .text(cdLogs.length.toString(), 300, currentY + 5, { width: 80, align: "center" })
+         .text(formatCurrencyForPdf(cdOutstanding, currency), 400, currentY + 5, { width: 135, align: "right" });
+
+      currentY += 18;
+      doc.strokeColor("#f1f5f9")
+         .lineWidth(0.5)
+         .moveTo(50, currentY)
+         .lineTo(545, currentY)
+         .stroke();
+
+      // Row 3: Due Above 90 Days
+      doc.text("Due Above 90 Days", 60, currentY + 5)
+         .text(over90Logs.length.toString(), 300, currentY + 5, { width: 80, align: "center" })
+         .text(formatCurrencyForPdf(over90Outstanding, currency), 400, currentY + 5, { width: 135, align: "right" });
+
+      currentY += 18;
+      doc.strokeColor(borderColor)
+         .lineWidth(1)
+         .moveTo(50, currentY)
+         .lineTo(545, currentY)
+         .stroke();
+
+      currentY += 15;
+
+      doc.fillColor(textColor)
+         .font("Helvetica-Bold")
+         .fontSize(12)
+         .text("Dealer Aging Breakdown", 50, currentY);
+
+      currentY += 18;
+
+      // Calculate brackets
+      const brackets = [
+        { label: "Above 120 Days", min: 120, max: Infinity },
+        { label: "Between 90 and 120 Days", min: 90, max: 119 },
+        { label: "75 Days", min: 75, max: 89 },
+        { label: "60 Days", min: 60, max: 74 },
+        { label: "45 Days", min: 45, max: 59 },
+        { label: "30 Days", min: 30, max: 44 }
+      ];
+
+      // Render each section
+      brackets.forEach((bracket) => {
+        const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
+        const ruleIds = matchingRules.map(r => r.id);
+        const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
+
+        // Only show sections with activity today
+        if (ruleLogs.length === 0) {
+          return;
+        }
+
+        const ruleLabel = bracket.label;
+        const ruleDealerCodes = Array.from(new Set(ruleLogs.map(log => log.dealerCode).filter(Boolean)));
+        const assignedDealersCount = ruleDealerCodes.length;
+        const sentTodayCount = ruleLogs.length;
+        const matchingDueIds = ruleLogs.map(log => log.dueId).filter(Boolean);
+        const ruleDues = dues.filter(due => matchingDueIds.includes(due.id));
+        const paymentDueAmount = ruleDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+        // Group by dealer
+        const dealerMap = new Map<string, typeof ruleDues>();
+        for (const due of ruleDues) {
+          const key = due.companyName || due.dealerCode || "Unknown";
+          if (!dealerMap.has(key)) dealerMap.set(key, []);
+          dealerMap.get(key)!.push(due);
+        }
+
+        // Draw section title
+        if (currentY > 650) {
+          doc.addPage();
+          currentY = 50;
+        }
+
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(10.5)
+           .text(`Dealers in ${ruleLabel}`, 50, currentY);
+
+        currentY += 14;
+
+        // Draw sub-metric boxes for the bracket
+        const subBoxWidth = 155;
+        const subBoxHeight = 35;
+
+        // Sub box 1
+        doc.rect(50, currentY, subBoxWidth, subBoxHeight)
+           .fillColor("#fcfcfc")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(0.5)
+           .stroke();
+        doc.fillColor(secondaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6)
+           .text("ASSIGNED DEALERS", 56, currentY + 8);
+        doc.fontSize(10)
+           .fillColor(textColor)
+           .text(assignedDealersCount.toString(), 56, currentY + 18);
+
+        // Sub box 2
+        doc.rect(220, currentY, subBoxWidth, subBoxHeight)
+           .fillColor("#fcfcfc")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(0.5)
+           .stroke();
+        doc.fillColor(secondaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6)
+           .text(`PAYMENT DUE (${bracket.label.toUpperCase()})`, 226, currentY + 8);
+        doc.fontSize(10)
+           .fillColor(primaryColor)
+           .text(formatCurrencyForPdf(paymentDueAmount, currency), 226, currentY + 18);
+
+        // Sub box 3
+        doc.rect(390, currentY, subBoxWidth, subBoxHeight)
+           .fillColor("#fcfcfc")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(0.5)
+           .stroke();
+        doc.fillColor(secondaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6)
+           .text("REMINDERS SENT TODAY", 396, currentY + 8);
+        doc.fontSize(10)
+           .fillColor("#b45309")
+           .text(sentTodayCount.toString(), 396, currentY + 18);
+
+        currentY += subBoxHeight + 12;
+
+        // Draw Table Header
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+        }
+
+        // Draw Table background
+        doc.rect(50, currentY, 495, 18)
+           .fillColor("#f8fafc")
+           .fill();
+
+        doc.fillColor(textColor)
+           .font("Helvetica-Bold")
+           .fontSize(8);
+
+        doc.text("Dealer",            60,  currentY + 5, { width: 140 });
+        doc.text("No. of Invoices",   200, currentY + 5, { width: 70, align: "center" });
+        doc.text("Due Date",          280, currentY + 5, { width: 85 });
+        doc.text("Invoice No.",       375, currentY + 5, { width: 85 });
+        doc.text("Outstanding",       460, currentY + 5, { width: 75, align: "right" });
+
+        doc.strokeColor(borderColor)
+           .lineWidth(0.5)
+           .moveTo(50, currentY + 18)
+           .lineTo(545, currentY + 18)
+           .stroke();
+
+        currentY += 18;
+
+        // Draw Table Rows
+        let rowIndex = 0;
+        dealerMap.forEach((groupDues, dealerName) => {
+          if (currentY > 730) {
+            doc.addPage();
+            currentY = 50;
+
+            // Redraw table headers on new page
+            doc.rect(50, currentY, 495, 18)
+               .fillColor("#f8fafc")
+               .fill();
+            doc.fillColor(textColor).font("Helvetica-Bold").fontSize(8);
+            doc.text("Dealer",            60,  currentY + 5, { width: 140 });
+            doc.text("No. of Invoices",   200, currentY + 5, { width: 70, align: "center" });
+            doc.text("Due Date",          280, currentY + 5, { width: 85 });
+            doc.text("Invoice No.",       375, currentY + 5, { width: 85 });
+            doc.text("Outstanding",       460, currentY + 5, { width: 75, align: "right" });
+
+            doc.strokeColor(borderColor)
+               .lineWidth(0.5)
+               .moveTo(50, currentY + 18)
+               .lineTo(545, currentY + 18)
+               .stroke();
+
+            currentY += 18;
+          }
+
+          // Row background
+          if (rowIndex % 2 === 1) {
+            doc.rect(50, currentY, 495, 18)
+               .fillColor("#fafafa")
+               .fill();
+          }
+
+          const dealerAllDuesCount = dues.filter(
+            (d) => (d.companyName || d.dealerCode) === dealerName
+          ).length;
+          const dueDates = groupDues.map(d => d.dueDate ? formatDate(d.dueDate) : "-").join(", ");
+          const invoiceNos = groupDues.map(d => d.invoiceNumber || d.reference || "-").join(", ");
+          const totalOutstanding = groupDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+          doc.fillColor(textColor)
+             .font("Helvetica")
+             .fontSize(7.5)
+             .text(dealerName, 60, currentY + 5, { width: 140, height: 10, ellipsis: true })
+             .text(dealerAllDuesCount.toString(), 200, currentY + 5, { width: 70, align: "center" })
+             .text(dueDates, 280, currentY + 5, { width: 85, height: 10, ellipsis: true })
+             .text(invoiceNos, 375, currentY + 5, { width: 85, height: 10, ellipsis: true })
+             .text(formatCurrencyForPdf(totalOutstanding, currency), 460, currentY + 5, { width: 75, align: "right" });
+
+          currentY += 18;
+
+          doc.strokeColor("#f1f5f9")
+             .lineWidth(0.5)
+             .moveTo(50, currentY)
+             .lineTo(545, currentY)
+             .stroke();
+
+          rowIndex++;
+        });
+
+        currentY += 20; // gap before next aging bracket section
+      });
 
       doc.end();
     } catch (err) {

@@ -267,59 +267,73 @@ function toDateValue(value: unknown) {
     return "";
   }
 
-  if (typeof value === "number") {
+  let dateObj: Date | null = null;
+
+  if (value instanceof Date) {
+    dateObj = value;
+  } else if (typeof value === "number") {
     return excelSerialToIsoDate(value);
-  }
+  } else {
+    const text = toText(value);
+    const normalized = text.replace(/[.\-]/g, "/");
+    const dayFirstMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
 
-  const text = toText(value);
-  const normalized = text.replace(/[.\-]/g, "/");
-  const dayFirstMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-
-  if (dayFirstMatch) {
-    const day = Number(dayFirstMatch[1]);
-    const month = Number(dayFirstMatch[2]);
-    const year = Number(
-      dayFirstMatch[3].length === 2 ? `20${dayFirstMatch[3]}` : dayFirstMatch[3]
-    );
-    const parsed = new Date(Date.UTC(year, month - 1, day));
-
-    if (
-      !Number.isNaN(parsed.getTime()) &&
-      parsed.getUTCFullYear() === year &&
-      parsed.getUTCMonth() === month - 1 &&
-      parsed.getUTCDate() === day
-    ) {
-      return parsed.toISOString();
-    }
-  }
-
-  const monthNameMatch = text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
-
-  if (monthNameMatch) {
-    const day = Number(monthNameMatch[1]);
-    const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(
-      monthNameMatch[2].toLowerCase()
-    );
-    const year = Number(
-      monthNameMatch[3].length === 2 ? `20${monthNameMatch[3]}` : monthNameMatch[3]
-    );
-
-    if (month >= 0) {
-      const parsed = new Date(Date.UTC(year, month, day));
+    if (dayFirstMatch) {
+      const day = Number(dayFirstMatch[1]);
+      const month = Number(dayFirstMatch[2]);
+      const year = Number(
+        dayFirstMatch[3].length === 2 ? `20${dayFirstMatch[3]}` : dayFirstMatch[3]
+      );
+      const parsed = new Date(Date.UTC(year, month - 1, day));
 
       if (
         !Number.isNaN(parsed.getTime()) &&
         parsed.getUTCFullYear() === year &&
-        parsed.getUTCMonth() === month &&
+        parsed.getUTCMonth() === month - 1 &&
         parsed.getUTCDate() === day
       ) {
         return parsed.toISOString();
       }
     }
+
+    const monthNameMatch = text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+
+    if (monthNameMatch) {
+      const day = Number(monthNameMatch[1]);
+      const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(
+        monthNameMatch[2].toLowerCase()
+      );
+      const year = Number(
+        monthNameMatch[3].length === 2 ? `20${monthNameMatch[3]}` : monthNameMatch[3]
+      );
+
+      if (month >= 0) {
+        const parsed = new Date(Date.UTC(year, month, day));
+
+        if (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.getUTCFullYear() === year &&
+          parsed.getUTCMonth() === month &&
+          parsed.getUTCDate() === day
+        ) {
+          return parsed.toISOString();
+        }
+      }
+    }
+
+    const direct = new Date(text);
+    if (!Number.isNaN(direct.getTime())) {
+      dateObj = direct;
+    }
   }
 
-  const direct = new Date(text);
-  return Number.isNaN(direct.getTime()) ? "" : direct.toISOString();
+  if (dateObj) {
+    const ms = dateObj.getTime();
+    const roundedMs = Math.round(ms / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
+    return new Date(roundedMs).toISOString();
+  }
+
+  return "";
 }
 
 function toDateComparisonKey(value: unknown) {
@@ -585,7 +599,18 @@ function sheetToRows(worksheet: XLSX.WorkSheet, kind: ImportKind, headerRowIndex
 
 export function parseWorkbook(buffer: Buffer, kind: ImportKind) {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = workbook.SheetNames[0];
+  let sheetName = workbook.SheetNames[0];
+
+  if (kind === "due") {
+    const targetSheet = workbook.SheetNames.find((name) => {
+      const lower = name.toLowerCase();
+      return lower.includes("debtor") || lower.includes("domestic");
+    });
+    if (targetSheet) {
+      sheetName = targetSheet;
+    }
+  }
+
   const worksheet = workbook.Sheets[sheetName];
 
   if (!worksheet) {
