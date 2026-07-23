@@ -18,7 +18,9 @@ const defaultRuleBlueprints = [
   { name: "75 Day Reminder",  triggerDay: 75 },
   { name: "80 Day Reminder",  triggerDay: 80 },
   { name: "85 Day Reminder",  triggerDay: 85 },
-  { name: "90 Day Reminder",  triggerDay: 90 }
+  { name: "90 Day Reminder",  triggerDay: 90 },
+  { name: "95 Day Reminder",  triggerDay: 95 },
+  { name: "100 Day Reminder", triggerDay: 100 }
 ];
 
 // ─── CD Policies — 2 only ─────────────────────────────────────────────────────
@@ -35,9 +37,11 @@ function buildBody30() {
 
 Dear {{contactName}},
 
+Payment Due in 30 Days (For CD)
+
 Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.
 
-So kindly arrange to remit us the payment by/before the due date{{cdBenefitSuffix}}.
+So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.
 
 Thank you for your attention in the matter.
 
@@ -51,9 +55,11 @@ function buildBody45() {
 
 Dear {{contactName}},
 
+Payment Due in 45 Days (For CD)
+
 Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.
 
-So kindly arrange to remit us the payment by/before the due date{{cdBenefitSuffix}}.
+So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.
 
 Thank you for your attention in the matter.
 
@@ -69,7 +75,7 @@ Dear {{contactName}},
 
 Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.
 
-So kindly arrange to remit us the payment by/before the due date.
+So kindly arrange to remit us the payment by/before the due date, as per ARB’s Payment Terms.
 
 Thank you for your attention in the matter.
 
@@ -101,6 +107,8 @@ Dear {{contactName}},
 
 The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.
 
+This amount is due by 75 days.
+
 So kindly arrange to remit us the payment at urgent basis.
 
 Thank you for your attention in the matter.
@@ -116,6 +124,8 @@ function buildBody85() {
 Dear {{contactName}},
 
 The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.
+
+This amount is due by 80 days.
 
 So kindly arrange to remit us the payment at most urgent basis.
 
@@ -141,6 +151,39 @@ Thank you for your prompt corporation in the matter.
 
 Regards,
 {{senderCompany}}`;
+}
+
+function buildBody95() {
+  return `INVOICE {{invoiceNumber}}
+
+Dear {{contactName}},
+
+The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.
+
+As per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.
+
+So please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.
+
+Thank you for your attention in the matter.
+
+Regards,
+{{senderCompany}}`;
+}
+
+function buildBody100() {
+  return `INVOICE {{invoiceNumber}}
+
+Dear {{contactName}},
+
+This is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.
+
+Your invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.
+
+Thank you for your attention in the matter.
+
+Regards,
+{{senderCompany}}
+*********`;
 }
 
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
@@ -173,14 +216,25 @@ function buildWhatsapp90() {
   return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
 }
 
+function buildWhatsapp95() {
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped effective today. — {{senderCompany}}`;
+}
+
+function buildWhatsapp100() {
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+}
+
 // ─── Subject Lines ────────────────────────────────────────────────────────────
 
 function buildSubject(triggerDay: number) {
   if (triggerDay <= 60) {
     return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
   }
-  if (triggerDay === 90) {
+  if (triggerDay === 90 || triggerDay === 95) {
     return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
+  }
+  if (triggerDay === 100) {
+    return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
   }
   return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
 }
@@ -196,6 +250,8 @@ function buildEmailBody(triggerDay: number): string {
     case 80: return buildBody80();
     case 85: return buildBody85();
     case 90: return buildBody90();
+    case 95: return buildBody95();
+    case 100: return buildBody100();
     default:  return buildBody60();
   }
 }
@@ -209,6 +265,8 @@ function buildWhatsappBody(triggerDay: number): string {
     case 80: return buildWhatsapp80();
     case 85: return buildWhatsapp85();
     case 90: return buildWhatsapp90();
+    case 95: return buildWhatsapp95();
+    case 100: return buildWhatsapp100();
     default:  return buildWhatsapp60();
   }
 }

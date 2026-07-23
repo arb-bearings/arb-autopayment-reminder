@@ -157,6 +157,7 @@ function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): Pay
 }
 
 function buildReplacements(context: ReminderContext, senderCompany: string) {
+  const actualSenderCompany = "ARB Bearings Limited";
   const billDate = context.due.billDate || context.due.invoiceDate;
   const invoiceAmount = formatCurrency(context.due.amount, context.due.currency);
   const currentInvoiceDueAmount = formatCurrency(
@@ -173,7 +174,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     billAgeDays: context.billAgeDays,
     billDate: formatDate(billDate),
     companyBillKey: getDuePartyKey(context.due),
-    cdDiscountPercent: context.cdEvaluation.policy?.discountPercent ?? 0,
+    cdDiscountPercent: context.cdEvaluation.policy?.discountPercent ?? (context.rule.triggerDay === 30 ? 3 : context.rule.triggerDay === 45 ? 2 : 0),
     cdEligible: context.cdEvaluation.eligible ? "Eligible" : "Not eligible",
     cdMessage: buildCashDiscountMessage(context.cdEvaluation),
     cdPolicyWindowDays: context.cdEvaluation.policy?.paymentWindowDays ?? 0,
@@ -197,7 +198,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     current_invoice_due_amount: currentInvoiceDueAmount,
     daysBeforeDue: context.rule.triggerDay,
     dealer_name: context.due.companyName,
-    dealerCode: context.due.dealerCode || context.due.customerCode,
+    dealerCode: "",
     dueDate,
     due_date: dueDate,
     invoiceAmount,
@@ -211,7 +212,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     pendingAmount: formatCurrency(context.due.amount, context.due.currency),
     reference: context.due.reference || context.due.invoiceNumber || "N/A",
     reminderDay: context.rule.triggerDay,
-    senderCompany,
+    senderCompany: actualSenderCompany,
     totalDueAmount,
     total_due_amount: totalDueAmount
   };
@@ -309,28 +310,40 @@ function composeReminderContent(
         : buildCashDiscountShortMessage(evaluation);
 
     if (appendedCashDiscountMessage) {
-      filledTemplate =
-        channel === "email"
-          ? `${filledTemplate}\n\n${appendedCashDiscountMessage}`.trim()
-          : `${filledTemplate} ${appendedCashDiscountMessage}`.trim();
+      filledTemplate = `${filledTemplate}\n\n${appendedCashDiscountMessage}`.trim();
     }
   }
 
   if (!templateIncludesPaymentSummaryToken(template)) {
-    const paymentSummaryText =
-      channel === "email"
-        ? [
-            "",
-            "Outstanding Summary:",
-            `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
-            `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
-            `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
-          ].join("\n")
-        : ` Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}. Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}. Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}.`;
+    let paymentSummaryText = "";
+    if (channel === "email") {
+      paymentSummaryText = [
+        "",
+        "Outstanding Summary:",
+        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
+        `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
+        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+      ].join("\n");
+    } else if (channel === "whatsapp") {
+      paymentSummaryText = [
+        "",
+        "*Outstanding Summary*:",
+        `*Total outstanding*: ${formatCurrency(paymentSummary.totalDue, currency)}`,
+        `*Previous outstanding*: ${formatCurrency(paymentSummary.previousDue, currency)}`,
+        `*Current outstanding*: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+      ].join("\n");
+    } else {
+      // SMS
+      paymentSummaryText = [
+        "",
+        "Outstanding Summary:",
+        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
+        `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
+        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+      ].join("\n");
+    }
 
-    return channel === "email"
-      ? `${filledTemplate}\n${paymentSummaryText}`.trim()
-      : `${filledTemplate}${paymentSummaryText}`.trim();
+    return `${filledTemplate}\n${paymentSummaryText}`.trim();
   }
 
   return filledTemplate;
@@ -383,13 +396,6 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   `;
   });
 
-  const bodyHtml = log.content
-    .split(/\n{2,}/)
-    .filter((paragraph) => !/^(Payment Summary|Outstanding Summary):/i.test(paragraph.trim()))
-    .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()))
-    .map((paragraph) => `<p style="margin:0 0 14px;line-height:1.55;color:#374151;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
-    .join("");
-
   // Dynamically calculate trigger day brackets
   const rules = database?.reminderRules;
   const activeTriggerDays: number[] = Array.from(
@@ -401,7 +407,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     )
   ).sort((a, b) => a - b); // ascending
 
-  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90];
+  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100];
 
   const currentRule = rules?.find((r: any) => r.id === log.ruleId);
   // Use log.reminderDay (= rule.triggerDay stored at creation) as fallback — more reliable than billAgeDays
@@ -434,13 +440,31 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const box3Amount = getAmountForTriggerDay(nextRuleDay);
   const calculatedTotalOutstanding = box2Amount + box3Amount;
 
-  const isBox2Cd = currentRuleDay <= 60;
+  const isBox2Cd = currentRuleDay <= 45;
   const box2Label = `Payment Due in ${currentRuleDay} Days${isBox2Cd ? " (for CD)" : ""}`;
 
-  const isBox3Cd = nextRuleDay <= 60;
   const box3Label = nextRuleDay > 90
     ? `Payment Due in 90+ Days`
-    : `Payment Due in ${nextRuleDay} Days${isBox3Cd ? " (for CD)" : ""}`;
+    : `Payment Due in ${nextRuleDay} Days`;
+
+  const paragraphs = log.content
+    .split(/\n{2,}/)
+    .filter((paragraph) => !/^(Payment Summary|Outstanding Summary):/i.test(paragraph.trim()))
+    .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()));
+
+  const dearIdx = paragraphs.findIndex(p => p.trim().startsWith("Dear"));
+  if (dearIdx !== -1) {
+    paragraphs.splice(dearIdx + 1, 0, `<strong>${box2Label}</strong>`);
+  }
+
+  const bodyHtml = paragraphs
+    .map((paragraph) => {
+      if (paragraph.startsWith("<strong>")) {
+        return `<p style="margin:-6px 0 14px;font-weight:bold;color:#0f766e;font-size:15px;">${paragraph.replace(/<\/?strong>/g, "")}</p>`;
+      }
+      return `<p style="margin:0 0 14px;line-height:1.55;color:#374151;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`;
+    })
+    .join("");
 
   return `
     <!doctype html>
@@ -451,7 +475,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
             <div style="padding:24px 26px;background:#0f766e;color:#ffffff;">
               <div style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#ccfbf1;font-weight:700;">Payment Reminder</div>
               <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#ffffff;">Invoice ${escapeHtml(log.invoiceNumber || due.invoiceNumber || due.reference || "N/A")}</h1>
-              <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || due.dealerCode || "Customer")}</div>
+              <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || "Customer")}</div>
             </div>
             <div style="padding:22px 26px;">
 
@@ -495,7 +519,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
                   </tr>
                 </thead>
                 <tbody>
-                  ${invoiceRows.join("") || `<tr><td colspan="4" style="padding:14px;color:#6b7280;">No invoices found for this dealer code.</td></tr>`}
+                  ${invoiceRows.join("") || `<tr><td colspan="4" style="padding:14px;color:#6b7280;">No invoices found.</td></tr>`}
                   <tr style="background:#f9fafb;font-weight:bold;border-top:2px solid #e5e7eb;">
                     <td colspan="3" style="padding:11px 13px;color:#111827;font-weight:800;">Total Outstanding</td>
                     <td style="padding:11px 13px;text-align:right;color:#0f766e;font-weight:800;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</td>
@@ -778,7 +802,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
                 (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
               )
             : [];
-          const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer);
+          const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database);
           log.status = status;
           log.sentAt = new Date().toISOString();
           log.failureReason = "";
@@ -969,7 +993,7 @@ async function sendEmail(
 
   const attachments = pdfBuffer && due ? [
     {
-      filename: `outstanding-statement-${due.dealerCode || due.customerCode || "statement"}.pdf`,
+      filename: "outstanding-statement.pdf",
       content: pdfBuffer
     }
   ] : undefined;
@@ -1089,7 +1113,7 @@ async function sendTwilioSms(log: ReminderLog, settings: DispatchSettings) {
   );
 }
 
-async function getEmailContentForLog(
+export async function getEmailContentForLog(
   log: ReminderLog,
   due: DueRecord,
   allDuesForDealer: DueRecord[],
@@ -1158,7 +1182,7 @@ async function sendInteraktWhatsapp(
   });
   const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
   const currency = due.currency || "INR";
-  const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+  const customerName = due.matchedContactName || due.companyName || "Customer";
   const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
   // 2. Fetch the corresponding email template content so the PDF has the exact email message body
@@ -1185,12 +1209,12 @@ async function sendInteraktWhatsapp(
   );
 
   // 3. Upload to Google Drive and get shareable public direct download link
-  const fileName = `outstanding-statement-${dealerCode}-${log.id}.pdf`;
+  const fileName = `outstanding-statement-${log.id}.pdf`;
   const mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
   log.pdfUrl = mediaUrl;
 
   // 4. Send WhatsApp with the PDF document
-  const contactName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+  const contactName = due.matchedContactName || due.companyName || "Customer";
   const invoiceNumber = due.invoiceNumber || due.reference || "";
   const formattedAmount = (due.amount || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -1231,7 +1255,7 @@ async function deliverReminder(
       });
       const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
       const currency = due.currency || "INR";
-      const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+      const customerName = due.matchedContactName || due.companyName || "Customer";
       const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
       let pdfMessageBody = log.content;
@@ -1255,7 +1279,7 @@ async function deliverReminder(
         database
       );
 
-      const fileName = `outstanding-statement-${dealerCode}-${log.id}.pdf`;
+      const fileName = `outstanding-statement-${log.id}.pdf`;
       pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
       log.pdfUrl = pdfUrl;
     }

@@ -1911,3 +1911,286 @@ button:disabled {
     min-width: 150px;
   }
 }
+
+/* Grouped Dues Table Styles */
+.grouped-dues-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.dues-stats-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.dues-stat-card {
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dues-stat-card .label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dues-stat-card .value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--navy-950);
+}
+
+.dues-stat-card.overdue {
+  background: rgba(209, 73, 91, 0.03);
+  border-color: rgba(209, 73, 91, 0.15);
+}
+
+.dues-stat-card.overdue .value {
+  color: var(--danger);
+}
+
+.dues-stat-card.advance {
+  background: rgba(44, 140, 91, 0.03);
+  border-color: rgba(44, 140, 91, 0.15);
+}
+
+.dues-stat-card.advance .value {
+  color: var(--success);
+}
+
+.search-and-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+}
+
+.search-wrapper {
+  flex: 1;
+  min-width: 280px;
+}
+
+.search-wrapper input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.bulk-selection-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--blue-100);
+  padding: 0.6rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--navy-900);
+  border: 1px solid rgba(43, 97, 243, 0.15);
+}
+
+.party-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.party-card {
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.party-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.party-header {
+  display: flex;
+  align-items: center;
+  padding: 1.1rem 1.4rem;
+  background: var(--surface-soft);
+  gap: 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  flex-wrap: wrap;
+}
+
+.party-header:hover {
+  background: var(--surface-muted);
+}
+
+.party-checkbox-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.party-title-section {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.party-title-section h3 {
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--navy-950);
+  margin: 0;
+}
+
+.party-meta {
+  display: flex;
+  gap: 0.85rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+.badge.neutral {
+  background: var(--surface-muted);
+  color: var(--navy-900);
+  border: 1px solid var(--border);
+}
+
+.badge.overdue {
+  background: rgba(209, 73, 91, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(209, 73, 91, 0.15);
+}
+
+.badge.current {
+  background: rgba(44, 140, 91, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(44, 140, 91, 0.15);
+}
+
+.party-financials {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.financial-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.financial-item .fin-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.financial-item .fin-val {
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.financial-item .fin-val.pending {
+  color: var(--navy-950);
+}
+
+.financial-item .fin-val.advance {
+  color: var(--success);
+}
+
+.expand-toggle-btn {
+  background: transparent;
+  border: none;
+  padding: 0.35rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.expand-toggle-btn.expanded {
+  transform: rotate(180deg);
+}
+
+.party-details-panel {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.5rem 1.4rem 1.4rem 1.4rem;
+}
+
+.invoice-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.invoice-details-table th,
+.invoice-details-table td {
+  padding: 0.85rem 0.65rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(22, 43, 82, 0.05);
+}
+
+.invoice-details-table th {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.invoice-details-table tr:last-child td {
+  border-bottom: none;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-badge.matched {
+  background: rgba(44, 140, 91, 0.08);
+  color: var(--success);
+}
+
+.status-badge.missing {
+  background: rgba(209, 73, 91, 0.08);
+  color: var(--danger);
+}
+

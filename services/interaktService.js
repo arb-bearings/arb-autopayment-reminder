@@ -97,3 +97,60 @@ export async function sendPaymentReminder(phoneNumber, bodyValues, mediaUrl, fil
     throw new Error(buildInteraktError(error));
   }
 }
+
+export async function sendSalespersonSummaryWhatsapp(phoneNumber, salespersonName, totalOutstanding, mediaUrl) {
+  const apiKey = (process.env.INTERAKT_API_KEY || "").trim();
+  const templateName = (process.env.INTERAKT_SALESPERSON_TEMPLATE_NAME || process.env.INTERAKT_TEMPLATE_NAME || "payment_reminder").trim();
+  const languageCode = (process.env.INTERAKT_LANGUAGE_CODE || "en").trim();
+  const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
+  if (!apiKey) {
+    throw new Error("Interakt API key is missing.");
+  }
+
+  if (!normalizedPhoneNumber) {
+    throw new Error("WhatsApp recipient phone number is missing.");
+  }
+
+  // Fallback body values for standard template: [Name, Type, Total, Subtext]
+  const bodyValues = [
+    salespersonName,
+    "Daily Summary",
+    totalOutstanding,
+    "Please check email/PDF for details."
+  ];
+
+  const payload = {
+    countryCode: "+91",
+    phoneNumber: normalizedPhoneNumber,
+    type: "Template",
+    template: {
+      name: templateName,
+      languageCode,
+      bodyValues
+    }
+  };
+
+  if (mediaUrl) {
+    payload.template.headerValues = [mediaUrl];
+    payload.template.fileName = "reminder-summary.pdf";
+  }
+
+  try {
+    const response = await axios.post(
+      INTERAKT_MESSAGE_URL,
+      payload,
+      {
+        headers: {
+          Authorization: `Basic ${apiKey}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    throw new Error(buildInteraktError(error));
+  }
+}
+

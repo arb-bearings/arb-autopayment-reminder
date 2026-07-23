@@ -25,6 +25,7 @@
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.0"
   }
 }

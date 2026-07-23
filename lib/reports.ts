@@ -7,6 +7,9 @@ import { resolveDispatchSettings } from "@/lib/dispatch-settings";
 import { readDatabase } from "@/lib/storage";
 import type { AppDatabase, DispatchSettings, DueRecord, ReminderLog, User, ReminderRule } from "@/lib/types";
 import { daysBetween, formatCurrency, formatDate, getBillAgeDays } from "@/lib/utils";
+import { generateSalespersonSummaryPDF } from "@/lib/pdf-generator";
+import { uploadPdfToGoogleDrive } from "@/services/googleDriveService";
+import { sendSalespersonSummaryWhatsapp } from "@/services/interaktService";
 
 type ReportUser = Pick<User, "id" | "companyName" | "name" | "email" | "role">;
 
@@ -51,7 +54,8 @@ async function sendReportEmail(
   to: string[],
   subject: string,
   text: string,
-  html?: string
+  html?: string,
+  attachments?: any[]
 ) {
   if (to.length === 0) {
     return { skipped: true, recipientCount: 0 };
@@ -81,7 +85,8 @@ async function sendReportEmail(
     to,
     subject,
     text,
-    html
+    html,
+    attachments
   });
 
   return { skipped: false, recipientCount: to.length };
@@ -253,9 +258,6 @@ function buildDailyActivityReportHtml(input: {
 
               ${buildSectionTitle("Salesperson-wise Summary")}
               ${table(["Salesperson", "Invoices", "Outstanding"], salespersonRows.join(""))}
-
-              ${buildSectionTitle("Failed Dispatch Records")}
-              ${table(["Invoice", "Channel", "Recipient", "Reason"], failedRows.join(""), "No failed dispatch records.")}
             </div>
           </div>
         </div>
@@ -328,11 +330,6 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
     ...(topOverdue.length === 0
       ? ["None"]
       : topOverdue.map((entry) => `${entry.dealer}: ${entry.maxOverdueDays} days overdue, ${entry.invoiceCount} invoices, oldest due ${entry.oldestDueDate ? formatDate(entry.oldestDueDate) : "Not available"}, ${formatCurrency(entry.amount, dues[0]?.currency || "INR")}`)),
-    "",
-    "Failed Dispatch Records:",
-    ...(failedLogs.length === 0
-      ? ["None"]
-      : failedLogs.map((entry) => `${entry.invoiceNumber || "N/A"} ${entry.channel} ${entry.recipient}: ${entry.failureReason || "Failed"}`))
   ];
 
   return {
@@ -367,29 +364,21 @@ export async function sendDailyActivityReport(user: ReportUser, reportDate = new
 }
 
 export function buildSalespersonSummaryText(name: string, dues: DueRecord[], sentLogs: ReminderLog[], rules?: ReminderRule[]) {
-  const outstanding = dues.reduce((sum, entry) => sum + entry.amount, 0);
   const currency = dues[0]?.currency || "INR";
-  const today = new Date();
 
-  // Get active trigger days from reminder rules (enabled only) and deduplicate
-  const activeTriggerDays = Array.from(
-    new Set(
-      (rules || [])
-        .filter((r) => r.enabled)
-        .map((r) => r.triggerDay)
-        .filter((day) => typeof day === "number")
-    )
-  ).sort((a, b) => a - b);
+  const brackets = [
+    { label: "Above 120 Days", min: 120, max: Infinity },
+    { label: "Between 90 and 120 Days", min: 90, max: 119 },
+    { label: "75 Days", min: 75, max: 89 },
+    { label: "60 Days", min: 60, max: 74 },
+    { label: "45 Days", min: 45, max: 59 },
+    { label: "30 Days", min: 30, max: 44 }
+  ];
 
-  const finalDays = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90];
-  if (!finalDays.includes(120)) {
-    finalDays.push(120);
-  }
-
-  const sectionsText = finalDays.map((D) => {
-    const matchingRules = (rules || []).filter(r => r.triggerDay === D);
+  const sectionsText = brackets.map((bracket) => {
+    const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
     const ruleIds = matchingRules.map(r => r.id);
-    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || log.reminderDay === D);
+    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
 
     // Only show sections with activity today
     if (ruleLogs.length === 0) {
@@ -423,26 +412,38 @@ export function buildSalespersonSummaryText(name: string, dues: DueRecord[], sen
       return ` - Dealer: ${dealerName} | Total Invoices: ${dealerAllDuesCount} | Due: ${dueDates} | Invoices: ${invoiceNos} | Outstanding: ${formatCurrency(totalOutstanding, currency)}${pdfUrlStr}`;
     }).join("\n");
 
-    const ruleLabel = D === 120 ? "120 Days or More" : `${D} Days`;
+    const ruleLabel = bracket.label;
 
     return [
       `\n[Dealers in ${ruleLabel}]`,
-      ` * Assigned Dealers (sent ${D}d reminder today): ${assignedDealersCount}`,
-      ` * Payment Due in ${D} Days: ${formatCurrency(paymentDueAmount, currency)}`,
-      ` * Reminders Sent Today: ${sentTodayCount}`,
-      ` List of Dealers in ${ruleLabel}:`,
-      lines || "  No matching invoice records found."
+      ` * Assigned Dealers: ${assignedDealersCount}`,
+      ` * Payment Due (${bracket.label}): ${formatCurrency(paymentDueAmount, currency)}`,
+      ` * Reminders Sent Today: ${sentTodayCount}`
     ].join("\n");
   }).filter(Boolean).join("\n");
+
+  const uniqueDealers = Array.from(new Set(dues.map(d => d.companyName || d.dealerCode).filter(Boolean)));
+  const totalOutstanding = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+  const cdLogs = sentLogs.filter(log => log.cdEligible);
+  const cdDueIds = new Set(cdLogs.map(log => log.dueId).filter(Boolean));
+  const cdDues = dues.filter(due => cdDueIds.has(due.id));
+  const cdOutstanding = cdDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+  const over90Logs = sentLogs.filter(log => (log.reminderDay || 0) > 90);
+  const over90DueIds = new Set(over90Logs.map(log => log.dueId).filter(Boolean));
+  const over90Dues = dues.filter(due => over90DueIds.has(due.id));
+  const over90Outstanding = over90Dues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
   return [
     `Salesperson: ${name}`,
     "",
     "Action required: Dealers assigned to you have invoices with due dates coming up or already pending. Please contact each dealer, remind them about the pending invoices, and ask them to arrange payment.",
     "",
-    `Assigned Invoices: ${dues.length}`,
-    `Reminders Sent Today: ${sentLogs.length}`,
-    `Total Outstanding: ${formatCurrency(outstanding, currency)}`,
+    "Summary Table:",
+    ` * Total Assigned Dealers: Count = ${uniqueDealers.length} | Outstanding = ${formatCurrency(totalOutstanding, currency)}`,
+    ` * Due in CD: Count = ${cdLogs.length} | Outstanding = ${formatCurrency(cdOutstanding, currency)}`,
+    ` * Due Above 90 Days: Count = ${over90Logs.length} | Outstanding = ${formatCurrency(over90Outstanding, currency)}`,
     "",
     "Rule-by-Rule Aging Breakdown:",
     sectionsText
@@ -450,29 +451,21 @@ export function buildSalespersonSummaryText(name: string, dues: DueRecord[], sen
 }
 
 export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sentLogs: ReminderLog[], rules?: ReminderRule[]) {
-  const outstanding = dues.reduce((sum, entry) => sum + entry.amount, 0);
   const currency = dues[0]?.currency || "INR";
-  const today = new Date();
 
-  // Get active trigger days from reminder rules (enabled only) and deduplicate
-  const activeTriggerDays = Array.from(
-    new Set(
-      (rules || [])
-        .filter((r) => r.enabled)
-        .map((r) => r.triggerDay)
-        .filter((day) => typeof day === "number")
-    )
-  ).sort((a, b) => a - b);
+  const brackets = [
+    { label: "Above 120 Days", min: 120, max: Infinity },
+    { label: "Between 90 and 120 Days", min: 90, max: 119 },
+    { label: "75 Days", min: 75, max: 89 },
+    { label: "60 Days", min: 60, max: 74 },
+    { label: "45 Days", min: 45, max: 59 },
+    { label: "30 Days", min: 30, max: 44 }
+  ];
 
-  const finalDays = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90];
-  if (!finalDays.includes(120)) {
-    finalDays.push(120);
-  }
-
-  const sectionsHtml = finalDays.map((D) => {
-    const matchingRules = (rules || []).filter(r => r.triggerDay === D);
+  const sectionsHtml = brackets.map((bracket) => {
+    const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
     const ruleIds = matchingRules.map(r => r.id);
-    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || log.reminderDay === D);
+    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
 
     // Only show sections with activity today
     if (ruleLogs.length === 0) {
@@ -518,7 +511,7 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
       `;
     }).join("");
 
-    const ruleLabel = D === 120 ? "120 Days or More" : `${D} Days`;
+    const ruleLabel = bracket.label;
 
     return `
       <div style="margin-top:32px; border-top: 1px dashed #cbd5e1; padding-top: 24px;">
@@ -537,7 +530,7 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
             </td>
             <td style="width:33.33%;padding:5px;">
               <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fafafa;height:68px;">
-                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:800;line-height:1.2;">Payment Due in ${D} Days</div>
+                <div style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:800;line-height:1.2;">Payment Due (${escapeHtml(ruleLabel)})</div>
                 <div style="font-size:18px;font-weight:800;margin-top:4px;color:#0f766e;">${escapeHtml(formatCurrency(paymentDueAmount, currency))}</div>
               </div>
             </td>
@@ -550,33 +543,23 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
           </tr>
         </table>
 
-        <!-- List Heading -->
-        <h4 style="font-size:13px;color:#374151;margin:18px 0 8px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;">
-          List of Dealers in ${escapeHtml(ruleLabel)}
-        </h4>
-
-        <!-- Dealer Table -->
-        <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:18px;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th align="left" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:25%;">Dealer</th>
-              <th align="center" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:15%;">No. of Invoices</th>
-              <th align="left" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:15%;">Due Date</th>
-              <th align="left" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:15%;">Invoice No.</th>
-              <th align="right" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:15%;">Outstanding</th>
-              <th align="center" style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:11px;text-transform:uppercase;font-weight:800;width:15%;">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml || `<tr><td colspan="6" style="padding:12px;color:#6b7280;font-size:13px;text-align:center;">No invoices matching this rule bracket.</td></tr>`}
-          </tbody>
-        </table>
       </div>
     `;
   }).filter(Boolean).join("");
 
   // Get total unique dealers
   const uniqueDealers = new Set(dues.map((d) => d.companyName || d.dealerCode).filter(Boolean));
+  const totalOutstanding = dues.reduce((sum, entry) => sum + entry.amount, 0);
+
+  const cdLogs = sentLogs.filter(log => log.cdEligible);
+  const cdDueIds = new Set(cdLogs.map(log => log.dueId).filter(Boolean));
+  const cdDues = dues.filter(due => cdDueIds.has(due.id));
+  const cdOutstanding = cdDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+  const over90Logs = sentLogs.filter(log => (log.reminderDay || 0) > 90);
+  const over90DueIds = new Set(over90Logs.map(log => log.dueId).filter(Boolean));
+  const over90Dues = dues.filter(due => over90DueIds.has(due.id));
+  const over90Outstanding = over90Dues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
   return `
     <!doctype html>
@@ -597,27 +580,32 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
                 </p>
               </div>
 
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
-                <tr>
-                  <td style="width:33.33%;padding:10px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;">Assigned Dealers</div>
-                      <div style="font-size:24px;font-weight:700;margin-top:4px;">${escapeHtml(uniqueDealers.size)}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:10px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;">Sent Today</div>
-                      <div style="font-size:24px;font-weight:700;margin-top:4px;">${escapeHtml(sentLogs.length)}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:10px;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-                      <div style="font-size:12px;color:#6b7280;">Outstanding</div>
-                      <div style="font-size:20px;font-weight:700;margin-top:4px;">${escapeHtml(formatCurrency(outstanding, currency))}</div>
-                    </div>
-                  </td>
-                </tr>
+              <h2 style="font-size:18px;margin:24px 0 12px;color:#111827;font-weight:800;">Summary Table</h2>
+              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:22px;">
+                <thead>
+                  <tr style="background:#f9fafb;">
+                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Metric</th>
+                    <th align="center" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;width:20%;">Count</th>
+                    <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;width:30%;">Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;font-size:13px;">Total Assigned Dealers</td>
+                    <td align="center" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:13px;">${escapeHtml(uniqueDealers.size)}</td>
+                    <td align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;font-size:13px;">${escapeHtml(formatCurrency(totalOutstanding, currency))}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;font-size:13px;">Due in CD</td>
+                    <td align="center" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:13px;">${escapeHtml(cdLogs.length)}</td>
+                    <td align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;font-size:13px;">${escapeHtml(formatCurrency(cdOutstanding, currency))}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;font-size:13px;">Due Above 90 Days</td>
+                    <td align="center" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:13px;">${escapeHtml(over90Logs.length)}</td>
+                    <td align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#991b1b;font-size:13px;">${escapeHtml(formatCurrency(over90Outstanding, currency))}</td>
+                  </tr>
+                </tbody>
               </table>
 
               <h2 style="font-size:18px;margin:24px 0 12px;color:#111827;font-weight:800;">Dealer Aging Breakdown</h2>
@@ -654,14 +642,56 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         continue;
       }
 
+      // Generate Salesperson summary PDF
+      const pdfBuffer = await generateSalespersonSummaryPDF(
+        name,
+        records,
+        salespersonLogs,
+        database.reminderRules
+      );
+
+      const filename = `reminder-summary-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`;
+      const attachments = [
+        {
+          filename,
+          content: pdfBuffer
+        }
+      ];
+
       const result = await sendReportEmail(
         settings,
         [email],
         `Reminder Summary - ${name}`,
         buildSalespersonSummaryText(name, records, salespersonLogs, database.reminderRules),
-        buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules)
+        buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules),
+        attachments
       );
       results.push({ email, ...result });
+
+      // Check if salesperson has phone number to send WhatsApp notification
+      const salespersonObj = database.salespersons?.find(
+        (sp: any) => sp.email?.trim().toLowerCase() === email.trim().toLowerCase()
+      );
+      const phone = salespersonObj?.phoneNumber;
+      if (phone && phone.trim()) {
+        try {
+          const driveFileName = `reminder-summary-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`;
+          const pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, driveFileName);
+          const totalOutstanding = formatCurrency(
+            records.reduce((sum, d) => sum + (d.amount || 0), 0),
+            records[0]?.currency || "INR"
+          );
+
+          await sendSalespersonSummaryWhatsapp(
+            phone,
+            name,
+            totalOutstanding,
+            pdfUrl
+          );
+        } catch (wsErr) {
+          console.error(`Failed to send salesperson WhatsApp summary to ${phone}:`, wsErr);
+        }
+      }
     } catch (err) {
       console.error(`Failed to send salesperson summary to ${email}:`, err);
       results.push({ email, skipped: true, recipientCount: 0 });
