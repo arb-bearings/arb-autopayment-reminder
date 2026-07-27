@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import { formatCurrency, formatDate, getBillAgeDays } from "@/lib/utils";
 import type { DueRecord } from "@/lib/types";
 import { evaluateCashDiscountEligibility } from "./reminder-engine";
+import { getCompanyWorkspaceId } from "./company-workspace";
 
 // Helper to format currency for PDFKit standard fonts (which do not support the Unicode Rupee symbol "₹")
 function formatCurrencyForPdf(value: number, currency = "INR") {
@@ -32,6 +33,10 @@ export function generateOutstandingPDF(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
+      // Keep all pending invoices for the dealer (no 90 days limit)
+      const activeTotalAmount = dues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      totalAmount = activeTotalAmount;
+
       const doc = new PDFDocument({ margin: 50, size: "A4" });
       const chunks: Buffer[] = [];
 
@@ -100,111 +105,79 @@ export function generateOutstandingPDF(
       let isCdEligible = false;
       if (matchedDue && database) {
         try {
+          const workspaceUsers = database.users.filter(
+            (u: any) => getCompanyWorkspaceId(u.companyName) === matchedDue.ownerId
+          );
+          const sharedOwnerIds = new Set<string>([
+            matchedDue.ownerId,
+            ...workspaceUsers.map((u: any) => u.id)
+          ]);
           const policies = database.cashDiscountPolicies.filter(
-            (p: any) => p.ownerId === matchedDue.ownerId
+            (p: any) => sharedOwnerIds.has(p.ownerId)
           );
           const evalResult = evaluateCashDiscountEligibility(
             matchedDue,
             dues,
             policies,
-            today
+            today,
+            currentRuleDay
           );
           isCdEligible = evalResult.eligible;
         } catch (e) {
           console.error("Failed to evaluate CD eligibility in PDF generator:", e);
         }
       }
+       const box2Amount = matchedDue?.amount || 0;
+       const currentInvoiceAge = getBillAgeDays(matchedDue?.billDate || matchedDue?.invoiceDate || "", today) || 0;
 
-      // Initialize rule amount map
-      const ruleAmountMap = new Map<number, number>();
-      for (const r of sortedTriggerDays) {
-        ruleAmountMap.set(r, 0);
-      }
-
-      // Map each invoice in dues to its closest rule
-      for (const entry of dues) {
-        if (entry.amount <= 0) continue;
-        const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-        
-        let closestRuleDay = currentRuleDay;
-        let minDiff = Infinity;
-        for (const r of sortedTriggerDays) {
-          const diff = Math.abs(age - (r - 5));
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestRuleDay = r;
-          }
-        }
-        ruleAmountMap.set(closestRuleDay, (ruleAmountMap.get(closestRuleDay) || 0) + entry.amount);
-      }
-
-      // box2Amount is the amount for currentRuleDay
-      const box2Amount = ruleAmountMap.get(currentRuleDay) || 0;
-
-       // Find all other dues for this dealer (excluding the current due.id)
-      const otherDues = dues.filter((entry) => entry.id !== matchedDue?.id && entry.amount > 0);
+      // Find all other dues for this dealer (excluding the current due.id and must be older than the current invoice)
+      const otherDues = dues.filter((entry) => {
+        if (entry.id === matchedDue?.id || !(entry.amount > 0)) return false;
+        const entryAge = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+        return entryAge > currentInvoiceAge;
+      });
       
       let nextRuleDay = 125;
       let box3Amount = 0;
       let box3Label = "";
 
       if (otherDues.length > 0) {
-        // Find the oldest invoice age among all other dues
-        const ages = otherDues.map(entry => getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0);
-        const oldestOtherAge = Math.max(...ages);
+        // Sort other dues by billDate descending (newest first) to find the most recent older one
+        const sortedOtherDues = [...otherDues].sort((a, b) =>
+          (b.billDate || b.invoiceDate || "").localeCompare(a.billDate || a.invoiceDate || "")
+        );
+        const lastRecentBill = sortedOtherDues[0];
+        const lastRecentAge = getBillAgeDays(lastRecentBill.billDate || lastRecentBill.invoiceDate, today) || 0;
 
-        if (oldestOtherAge >= 120) {
+        nextRuleDay = lastRecentAge; // fallback identifier
+        box3Amount = lastRecentBill.amount || 0;
+
+        if (lastRecentAge >= 120) {
           box3Label = `PAYMENT MORE THAN 120 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120)
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-          nextRuleDay = 125;
-        } else if (oldestOtherAge >= 90) {
+        } else if (lastRecentAge >= 90) {
           box3Label = `PAYMENT MORE THAN 90 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              return age >= 90 && age <= 119;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-          nextRuleDay = 95;
-        } else if (oldestOtherAge >= 60) {
+        } else if (lastRecentAge >= 60) {
           box3Label = `PAYMENT MORE THAN 60 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              return age >= 60 && age <= 89;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-          nextRuleDay = 75;
         } else {
-          // If oldest other age is less than 60, find the closest active rule trigger day
-          let closestRuleDay = currentRuleDay;
+          // Find closest trigger day for the last recent bill among days <= 60
+          let lastRecentTriggerDay = sortedTriggerDays[0];
           let minDiff = Infinity;
           for (const r of sortedTriggerDays) {
-            const diff = Math.abs(oldestOtherAge - (r - 5));
+            if (r > 60) continue;
+            const diff = Math.abs(lastRecentAge - (r - 5));
             if (diff < minDiff) {
               minDiff = diff;
-              closestRuleDay = r;
+              lastRecentTriggerDay = r;
             }
           }
-          nextRuleDay = closestRuleDay;
-          box3Label = `PAYMENT DUE IN ${nextRuleDay} DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              let closest = currentRuleDay;
-              let diffMin = Infinity;
-              for (const r of sortedTriggerDays) {
-                const diff = Math.abs(age - (r - 5));
-                if (diff < diffMin) {
-                  diffMin = diff;
-                  closest = r;
-                }
-              }
-              return closest === nextRuleDay;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+
+          if (lastRecentTriggerDay === 30 || lastRecentTriggerDay === 45) {
+            box3Label = `PAYMENT DUE IN ${lastRecentTriggerDay} DAYS (FOR CD)`;
+          } else if (lastRecentTriggerDay === 60) {
+            box3Label = `PAYMENT DUE IN 60 DAYS`;
+          } else {
+            box3Label = `PAYMENT DUE IN ${lastRecentTriggerDay} DAYS`;
+          }
         }
       } else {
         // Fallback: next rule in sortedTriggerDays relative to currentRuleDay
@@ -213,78 +186,117 @@ export function generateOutstandingPDF(
           ? sortedTriggerDays[currentIdx + 1]
           : 125;
         box3Amount = 0;
-        box3Label = nextRuleDay >= 120
-          ? `PAYMENT MORE THAN 120 DAYS`
-          : nextRuleDay >= 90
-          ? `PAYMENT MORE THAN 90 DAYS`
-          : nextRuleDay >= 60
-          ? `PAYMENT MORE THAN 60 DAYS`
-          : `PAYMENT DUE IN ${nextRuleDay} DAYS`;
+        
+        if (nextRuleDay === 30 || nextRuleDay === 45) {
+          box3Label = `PAYMENT DUE IN ${nextRuleDay} DAYS (FOR CD)`;
+        } else if (nextRuleDay === 60) {
+          box3Label = `PAYMENT DUE IN 60 DAYS`;
+        } else if (nextRuleDay >= 75) {
+          box3Label = `PAYMENT OVERDUE IN ${nextRuleDay} DAYS`;
+        } else {
+          box3Label = `PAYMENT DUE IN ${nextRuleDay} DAYS`;
+        }
       }
 
-      const calculatedTotalOutstanding = box2Amount + box3Amount;
+      // Total outstanding = sum of ALL dues for this dealer (not just box2+box3,
+      // which would miss intermediate-age invoices that fall outside both buckets)
+      const calculatedTotalOutstanding = dues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
       let box2Label = "";
-      if (currentRuleDay <= 45) {
-        box2Label = isCdEligible
-          ? `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`
-          : `PAYMENT DUE IN ${currentRuleDay} DAYS`;
+      if (currentRuleDay === 30 || currentRuleDay === 45) {
+        box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`;
       } else if (currentRuleDay === 60) {
         box2Label = `PAYMENT DUE IN 60 DAYS`;
-      } else if (currentRuleDay > 60 && currentRuleDay < 90) {
-        box2Label = `PAYMENT MORE THAN 60 DAYS`;
+      } else if (currentRuleDay >= 75) {
+        box2Label = `PAYMENT OVERDUE IN ${currentRuleDay} DAYS`;
       } else {
-        box2Label = `PAYMENT MORE THAN 90 DAYS`;
+        box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS`;
       }
 
-      const boxWidth = 155;
-      const boxHeight = 50;
       const boxY = 165;
 
-      // Box 1: Payment Due in X Days
-      doc.rect(50, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text(box2Label.toUpperCase(), 58, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor(textColor)
-         .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: 140 });
+      if (currentRuleDay === 75) {
+        const boxWidth = 240;
+        const boxHeight = 50;
 
-      // Box 2: Payment Due in Y Days
-      doc.rect(220, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text(box3Label.toUpperCase(), 228, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor("#b45309") // Amber/orange
-         .text(formatCurrencyForPdf(box3Amount, currency), 228, boxY + 26, { width: 140 });
+        // Box 1: Payment Overdue in 75 Days
+        doc.rect(50, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box2Label.toUpperCase(), 58, boxY + 12, { width: boxWidth - 16 });
+        doc.fontSize(11)
+           .fillColor(textColor)
+           .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: boxWidth - 16 });
 
-      // Box 3: Total Outstanding
-      doc.rect(390, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text("TOTAL OUTSTANDING", 398, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor("#0f766e") // Teal
-         .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 398, boxY + 26, { width: 140 });
+        // Box 2: Total Outstanding
+        doc.rect(305, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text("TOTAL OUTSTANDING", 313, boxY + 12, { width: boxWidth - 16 });
+        doc.fontSize(11)
+           .fillColor("#0f766e") // Teal
+           .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 313, boxY + 26, { width: boxWidth - 16 });
+      } else {
+        const boxWidth = 155;
+        const boxHeight = 50;
+
+        // Box 1: Payment Due in X Days
+        doc.rect(50, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box2Label.toUpperCase(), 58, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor(textColor)
+           .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: 140 });
+
+        // Box 2: Payment Due in Y Days
+        doc.rect(220, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box3Label.toUpperCase(), 228, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor("#b45309") // Amber/orange
+           .text(formatCurrencyForPdf(box3Amount, currency), 228, boxY + 26, { width: 140 });
+
+        // Box 3: Total Outstanding
+        doc.rect(390, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text("TOTAL OUTSTANDING", 398, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor("#0f766e") // Teal
+           .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 398, boxY + 26, { width: 140 });
+      }
 
       let currentY = 230;
 

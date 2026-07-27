@@ -36,7 +36,7 @@ const defaultCashDiscountBlueprints = [
 
 // ─── Email Body Builders ──────────────────────────────────────────────────────
 
-/** 30-day: due in 5 days — CD suffix is dynamic via {{cdBenefitSuffix}} */
+/** 30-day: due in 5 days — CD message is dynamic via {{cdMessage}} */
 function buildBody30() {
   return `INVOICE {{invoiceNumber}}
 
@@ -52,7 +52,7 @@ Regards,
 {{senderCompany}}`;
 }
 
-/** 45-day: due in 5 days — CD suffix is dynamic via {{cdBenefitSuffix}} */
+/** 45-day: due in 5 days — CD message is dynamic via {{cdMessage}} */
 function buildBody45() {
   return `INVOICE {{invoiceNumber}}
 
@@ -161,7 +161,7 @@ Dear {{contactName}},
 
 The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.
 
-As per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.
+As per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.
 
 So please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.
 
@@ -190,11 +190,11 @@ Regards,
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
 
 function buildWhatsapp30() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp45() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp60() {
@@ -249,15 +249,16 @@ function buildEmailBody(triggerDay: number): string {
     case 60: return buildBody60();
     case 75: return buildBody75();
     case 80: return buildBody80();
-    case 85: return buildBody85();
-    case 90: return buildBody90();
-    case 95: return buildBody95();
-    case 100: return buildBody100();
-    case 105: return buildBody100().replace("95 days", "100 days");
-    case 110: return buildBody100().replace("95 days", "105 days");
-    case 115: return buildBody100().replace("95 days", "110 days");
-    case 120: return buildBody100().replace("95 days", "115 days");
-    case 125: return buildBody100().replace("95 days", "120 days");
+    case 85:
+    case 90:
+    case 95:
+    case 100:
+    case 105:
+    case 110:
+    case 115:
+    case 120:
+    case 125:
+      return buildBody95();
     default:  return buildBody60();
   }
 }
@@ -269,15 +270,16 @@ function buildWhatsappBody(triggerDay: number): string {
     case 60: return buildWhatsapp60();
     case 75: return buildWhatsapp75();
     case 80: return buildWhatsapp80();
-    case 85: return buildWhatsapp85();
-    case 90: return buildWhatsapp90();
-    case 95: return buildWhatsapp95();
-    case 100: return buildWhatsapp100();
-    case 105: return buildWhatsapp100().replace("95 days", "100 days");
-    case 110: return buildWhatsapp100().replace("95 days", "105 days");
-    case 115: return buildWhatsapp100().replace("95 days", "110 days");
-    case 120: return buildWhatsapp100().replace("95 days", "115 days");
-    case 125: return buildWhatsapp100().replace("95 days", "120 days");
+    case 85:
+    case 90:
+    case 95:
+    case 100:
+    case 105:
+    case 110:
+    case 115:
+    case 120:
+    case 125:
+      return buildWhatsapp95();
     default:  return buildWhatsapp60();
   }
 }
