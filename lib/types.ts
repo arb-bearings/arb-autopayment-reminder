@@ -158,6 +158,10 @@ export type CashDiscountPolicy = {
   discountPercent: number;
   enabled: boolean;
   description: string;
+  cdMessageTemplate?: string;
+  cdMessageWithOlderTemplate?: string;
+  cdShortMessageTemplate?: string;
+  cdShortMessageWithOlderTemplate?: string;
   createdAt: string;
   updatedAt: string;
 };

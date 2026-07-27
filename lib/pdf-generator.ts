@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { formatCurrency, formatDate, getBillAgeDays } from "@/lib/utils";
 import type { DueRecord } from "@/lib/types";
+import { evaluateCashDiscountEligibility } from "./reminder-engine";
 
 // Helper to format currency for PDFKit standard fonts (which do not support the Unicode Rupee symbol "₹")
 function formatCurrencyForPdf(value: number, currency = "INR") {
@@ -85,7 +86,7 @@ export function generateOutstandingPDF(
         )
       ).sort((a, b) => a - b); // ascending
 
-      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100];
+      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125];
 
       // Find current rule trigger day
       const currentRule = rules?.find((r: any) => r.id === ruleId);
@@ -95,40 +96,146 @@ export function generateOutstandingPDF(
       const defaultDay = rawBillAge > 0 ? rawBillAge + 5 : 30;
       const currentRuleDay = currentRule ? currentRule.triggerDay : defaultDay;
 
-      const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
-      const nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
-        ? sortedTriggerDays[currentIdx + 1]
-        : 120; // default/fallback
-
       const today = new Date();
-      const getAmountForTriggerDay = (day: number) => {
-        const idx = sortedTriggerDays.indexOf(day);
-        if (idx === -1) {
-          return day === currentRuleDay && matchedDue ? matchedDue.amount : 0;
+      let isCdEligible = false;
+      if (matchedDue && database) {
+        try {
+          const policies = database.cashDiscountPolicies.filter(
+            (p: any) => p.ownerId === matchedDue.ownerId
+          );
+          const evalResult = evaluateCashDiscountEligibility(
+            matchedDue,
+            dues,
+            policies,
+            today
+          );
+          isCdEligible = evalResult.eligible;
+        } catch (e) {
+          console.error("Failed to evaluate CD eligibility in PDF generator:", e);
         }
-        const minAge = idx === 0 ? -Infinity : sortedTriggerDays[idx - 1] + 1;
-        const maxAge = idx === sortedTriggerDays.length - 1 ? Infinity : day;
+      }
 
-        return dues
-          .filter((entry) => {
-            const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-            const nominalAge = age + 5; // engine offset: rule triggers 5 days before nominal day
-            return nominalAge >= minAge && nominalAge <= maxAge;
-          })
-          .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      };
+      // Initialize rule amount map
+      const ruleAmountMap = new Map<number, number>();
+      for (const r of sortedTriggerDays) {
+        ruleAmountMap.set(r, 0);
+      }
 
-      const box2Amount = getAmountForTriggerDay(currentRuleDay);
-      const box3Amount = getAmountForTriggerDay(nextRuleDay);
+      // Map each invoice in dues to its closest rule
+      for (const entry of dues) {
+        if (entry.amount <= 0) continue;
+        const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+        
+        let closestRuleDay = currentRuleDay;
+        let minDiff = Infinity;
+        for (const r of sortedTriggerDays) {
+          const diff = Math.abs(age - (r - 5));
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestRuleDay = r;
+          }
+        }
+        ruleAmountMap.set(closestRuleDay, (ruleAmountMap.get(closestRuleDay) || 0) + entry.amount);
+      }
 
-      const isBox2Cd = currentRuleDay <= 45;
-      const box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS${isBox2Cd ? " (for CD)" : ""}`;
+      // box2Amount is the amount for currentRuleDay
+      const box2Amount = ruleAmountMap.get(currentRuleDay) || 0;
 
-      const box3Label = nextRuleDay > 90
-        ? `PAYMENT DUE IN 90+ DAYS`
-        : `PAYMENT DUE IN ${nextRuleDay} DAYS`;
+       // Find all other dues for this dealer (excluding the current due.id)
+      const otherDues = dues.filter((entry) => entry.id !== matchedDue?.id && entry.amount > 0);
+      
+      let nextRuleDay = 125;
+      let box3Amount = 0;
+      let box3Label = "";
+
+      if (otherDues.length > 0) {
+        // Find the oldest invoice age among all other dues
+        const ages = otherDues.map(entry => getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0);
+        const oldestOtherAge = Math.max(...ages);
+
+        if (oldestOtherAge >= 120) {
+          box3Label = `PAYMENT MORE THAN 120 DAYS`;
+          box3Amount = otherDues
+            .filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120)
+            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+          nextRuleDay = 125;
+        } else if (oldestOtherAge >= 90) {
+          box3Label = `PAYMENT MORE THAN 90 DAYS`;
+          box3Amount = otherDues
+            .filter(entry => {
+              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+              return age >= 90 && age <= 119;
+            })
+            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+          nextRuleDay = 95;
+        } else if (oldestOtherAge >= 60) {
+          box3Label = `PAYMENT MORE THAN 60 DAYS`;
+          box3Amount = otherDues
+            .filter(entry => {
+              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+              return age >= 60 && age <= 89;
+            })
+            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+          nextRuleDay = 75;
+        } else {
+          // If oldest other age is less than 60, find the closest active rule trigger day
+          let closestRuleDay = currentRuleDay;
+          let minDiff = Infinity;
+          for (const r of sortedTriggerDays) {
+            const diff = Math.abs(oldestOtherAge - (r - 5));
+            if (diff < minDiff) {
+              minDiff = diff;
+              closestRuleDay = r;
+            }
+          }
+          nextRuleDay = closestRuleDay;
+          box3Label = `PAYMENT DUE IN ${nextRuleDay} DAYS`;
+          box3Amount = otherDues
+            .filter(entry => {
+              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+              let closest = currentRuleDay;
+              let diffMin = Infinity;
+              for (const r of sortedTriggerDays) {
+                const diff = Math.abs(age - (r - 5));
+                if (diff < diffMin) {
+                  diffMin = diff;
+                  closest = r;
+                }
+              }
+              return closest === nextRuleDay;
+            })
+            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+        }
+      } else {
+        // Fallback: next rule in sortedTriggerDays relative to currentRuleDay
+        const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
+        nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
+          ? sortedTriggerDays[currentIdx + 1]
+          : 125;
+        box3Amount = 0;
+        box3Label = nextRuleDay >= 120
+          ? `PAYMENT MORE THAN 120 DAYS`
+          : nextRuleDay >= 90
+          ? `PAYMENT MORE THAN 90 DAYS`
+          : nextRuleDay >= 60
+          ? `PAYMENT MORE THAN 60 DAYS`
+          : `PAYMENT DUE IN ${nextRuleDay} DAYS`;
+      }
 
       const calculatedTotalOutstanding = box2Amount + box3Amount;
+
+      let box2Label = "";
+      if (currentRuleDay <= 45) {
+        box2Label = isCdEligible
+          ? `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`
+          : `PAYMENT DUE IN ${currentRuleDay} DAYS`;
+      } else if (currentRuleDay === 60) {
+        box2Label = `PAYMENT DUE IN 60 DAYS`;
+      } else if (currentRuleDay > 60 && currentRuleDay < 90) {
+        box2Label = `PAYMENT MORE THAN 60 DAYS`;
+      } else {
+        box2Label = `PAYMENT MORE THAN 90 DAYS`;
+      }
 
       const boxWidth = 155;
       const boxHeight = 50;
@@ -509,8 +616,9 @@ export function generateSalespersonSummaryPDF(
 
       // Calculate brackets
       const brackets = [
-        { label: "Above 120 Days", min: 120, max: Infinity },
-        { label: "Between 90 and 120 Days", min: 90, max: 119 },
+        { label: "More than 120 Days", min: 121, max: Infinity },
+        { label: "Between 90 and 120 Days", min: 91, max: 120 },
+        { label: "90 Days", min: 90, max: 90 },
         { label: "75 Days", min: 75, max: 89 },
         { label: "60 Days", min: 60, max: 74 },
         { label: "45 Days", min: 45, max: 59 },

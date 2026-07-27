@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { getMongoDatabase } from "@/lib/mongodb";
 import type { AppDatabase } from "@/lib/types";
 
@@ -43,17 +44,76 @@ function toBooleanValue(value: unknown, fallback = false) {
 }
 
 function normalizeRole(value: unknown, index = 1) {
-  return value === "super_admin" || value === "admin" || value === "user"
+  return (value === "super_admin" || value === "admin" || value === "user"
     ? value
     : index === 0
       ? "super_admin"
-      : "user";
+      : "user") as "super_admin" | "admin" | "user";
+}
+
+function ensureAllRulesExist(db: AppDatabase): AppDatabase {
+  const ownerIds = Array.from(new Set(db.reminderRules.map(r => r.ownerId).filter(Boolean)));
+  if (ownerIds.length === 0 && db.users.length > 0) {
+    db.users.forEach(u => ownerIds.push(u.id));
+  }
+  const uniqueOwnerIds = Array.from(new Set(ownerIds));
+
+  const rulesToAdd: any[] = [];
+  const templatesToAdd: any[] = [];
+
+  const requiredTriggerDays = [105, 110, 115, 120];
+
+  for (const ownerId of uniqueOwnerIds) {
+    for (const triggerDay of requiredTriggerDays) {
+      const hasRule = db.reminderRules.some(r => r.ownerId === ownerId && r.triggerDay === triggerDay);
+      if (!hasRule) {
+        const ruleId = randomUUID();
+        const templateId = randomUUID();
+
+        rulesToAdd.push({
+          id: ruleId,
+          ownerId,
+          name: `${triggerDay} Day Reminder`,
+          triggerDay,
+          enabled: true,
+          autoSend: false,
+          channels: {
+            email: true,
+            whatsapp: true,
+            sms: false
+          },
+          templateId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        templatesToAdd.push({
+          id: templateId,
+          ownerId,
+          ruleId,
+          name: `${triggerDay} Day Reminder`,
+          emailSubject: `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`,
+          emailBody: buildMigratedEmailBody(triggerDay),
+          whatsappBody: buildMigratedWhatsappBody(triggerDay),
+          smsBody: buildMigratedWhatsappBody(triggerDay),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  }
+
+  if (rulesToAdd.length > 0) {
+    db.reminderRules.push(...rulesToAdd);
+    db.templates.push(...templatesToAdd);
+  }
+
+  return db;
 }
 
 function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppDatabase {
   const source = input || {};
 
-  return {
+  const db = {
     users: Array.isArray(source.users)
       ? source.users.map((user, index) => ({
           id: toStringValue(user?.id),
@@ -86,7 +146,7 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           userName: toStringValue(event?.userName),
           companyName: toStringValue(event?.companyName),
           userRole: normalizeRole(event?.userRole),
-          type: event?.type === "logout" ? "logout" : "login",
+          type: (event?.type === "logout" ? "logout" : "login") as "login" | "logout",
           sessionTokenSuffix: toStringValue(event?.sessionTokenSuffix),
           ipAddress: toStringValue(event?.ipAddress),
           userAgent: toStringValue(event?.userAgent),
@@ -149,7 +209,7 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             matchedEmail: toStringValue(record?.matchedEmail),
             matchedWhatsapp: toStringValue(record?.matchedWhatsapp),
             matchedSms: toStringValue(record?.matchedSms),
-            contactMatchStatus: record?.contactMatchStatus === "matched" ? "matched" : "missing",
+            contactMatchStatus: (record?.contactMatchStatus === "matched" ? "matched" : "missing") as "matched" | "missing",
             totalDueAmount: toNumberValue((record as Record<string, unknown>)?.totalDueAmount ?? record?.amount),
             salespersonId: toStringValue((record as Record<string, unknown>)?.salespersonId),
             salespersonName: toStringValue((record as Record<string, unknown>)?.salespersonName),
@@ -235,12 +295,13 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           reportRecipients: Array.isArray((settings as Record<string, unknown>)?.reportRecipients)
             ? ((settings as Record<string, unknown>)?.reportRecipients as unknown[]).map(toStringValue).filter(Boolean)
             : [],
-          reportFrequency:
+          reportFrequency: (
             (settings as Record<string, unknown>)?.reportFrequency === "weekly" ||
             (settings as Record<string, unknown>)?.reportFrequency === "monthly" ||
             (settings as Record<string, unknown>)?.reportFrequency === "manual"
               ? ((settings as Record<string, unknown>)?.reportFrequency as "weekly" | "monthly" | "manual")
-              : "daily",
+              : "daily"
+          ) as "weekly" | "monthly" | "manual" | "daily",
           reportTime: toStringValue((settings as Record<string, unknown>)?.reportTime) || "18:00",
           updatedAt: toStringValue(settings?.updatedAt)
         }))
@@ -254,6 +315,10 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           discountPercent: toNumberValue(policy?.discountPercent),
           enabled: toBooleanValue(policy?.enabled, true),
           description: toStringValue(policy?.description),
+          cdMessageTemplate: toStringValue(policy?.cdMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit, please remit us the payment by/before the due date",
+          cdMessageWithOlderTemplate: toStringValue(policy?.cdMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date.",
+          cdShortMessageTemplate: toStringValue(policy?.cdShortMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit, pay by/before due date.",
+          cdShortMessageWithOlderTemplate: toStringValue(policy?.cdShortMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, pay all older unpaid invoices along with current invoice by/before due date.",
           createdAt: toStringValue(policy?.createdAt),
           updatedAt: toStringValue(policy?.updatedAt)
         }))
@@ -279,15 +344,16 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             cdDiscountPercent: toNumberValue(log?.cdDiscountPercent),
             cdReason: toStringValue(log?.cdReason),
             channel:
-              log?.channel === "sms" || log?.channel === "whatsapp" ? log.channel : "email",
+              (log?.channel === "sms" || log?.channel === "whatsapp" ? log.channel : "email") as "email" | "whatsapp" | "sms",
             recipient: toStringValue(log?.recipient),
             scheduledFor: toStringValue(log?.scheduledFor),
-            status:
+            status: (
               rawStatus === "sent" || rawStatus === "failed"
                 ? rawStatus
                 : rawStatus === "simulated"
                   ? "sent"
-                  : "pending",
+                  : "pending"
+            ) as "sent" | "failed" | "pending",
             subject: toStringValue(log?.subject),
             content: toStringValue(log?.content),
             failureReason: toStringValue(log?.failureReason),
@@ -339,11 +405,13 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           userEmail: toStringValue(entry?.userEmail),
           role: normalizeRole(entry?.role),
           action: toStringValue(entry?.action),
-          status: entry?.status === "failed" ? "failed" : "success",
+          status: (entry?.status === "failed" ? "failed" : "success") as "failed" | "success",
           details: toStringValue(entry?.details)
         }))
       : []
   };
+
+  return ensureAllRulesExist(db);
 }
 
 async function readLegacyFileDatabase() {
@@ -388,24 +456,22 @@ function buildMigratedEmailBody(triggerDay: number): string {
   switch (triggerDay) {
     case 30:
       return base +
-        `Payment Due in 30 Days (For CD)\n\n` +
         `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
-        `So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.` +
+        `{{cdMessage}}` +
         footer;
     case 45:
       return base +
-        `Payment Due in 45 Days (For CD)\n\n` +
         `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
-        `So kindly arrange to remit us the payment by/before the due date to avail the {{cdDiscountPercent}}% CD Benefit.` +
+        `{{cdMessage}}` +
         footer;
     case 60:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
-        `So kindly arrange to remit us the payment by/before the due date, as per ARB’s Payment Terms.` +
+        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days & Total Outstanding Rs. {{totalDueAmount}}.\n\n` +
+        `So kindly arrange to remit us the total outstanding by/before the due date, as per ARB’s payment Terms.` +
         footer;
     case 75:
       return base +
-        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at earliest possible.` +
+        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now & Total Outstanding is Rs. {{totalDueAmount}}.\n\nSo kindly arrange to remit us the payment at earliest possible.` +
         footer;
     case 80:
       return base +
@@ -418,9 +484,19 @@ function buildMigratedEmailBody(triggerDay: number): string {
     case 90:
       return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
     case 95:
-      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
     case 100:
       return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
+    case 105:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 100 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
+    case 110:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
+    case 115:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 110 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
+    case 120:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
+    case 125:
+      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 120 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -429,7 +505,7 @@ function buildMigratedEmailBody(triggerDay: number): string {
 function buildMigratedEmailSubject(triggerDay: number): string {
   if (triggerDay <= 60) return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
   if (triggerDay === 90 || triggerDay === 95) return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
-  if (triggerDay === 100) return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
+  if (triggerDay >= 100 && triggerDay <= 125) return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
   return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
 }
 
@@ -452,6 +528,16 @@ function buildMigratedWhatsappBody(triggerDay: number): string {
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped effective today. — {{senderCompany}}`;
     case 100:
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+    case 105:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 100 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+    case 110:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 105 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+    case 115:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 110 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+    case 120:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 115 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+    case 125:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 120 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -461,7 +547,7 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
   // Build a map from templateId → rule so we can look up triggerDay per template
   const ruleByTemplateId = new Map(db.reminderRules.map((rule) => [rule.templateId, rule]));
 
-  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100]);
+  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125]);
 
   const migratedTemplates = db.templates.map((template) => {
     const rule = ruleByTemplateId.get(template.id);

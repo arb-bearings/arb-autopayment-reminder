@@ -49,6 +49,7 @@ type CashDiscountEvaluation = {
   firstBill: boolean;
   policy: CashDiscountPolicy | null;
   reason: string;
+  hasOlderUnpaid: boolean;
 };
 
 type PaymentSummary = {
@@ -97,28 +98,30 @@ function buildCashDiscountShortSummary(evaluation: CashDiscountEvaluation) {
   return evaluation.reason;
 }
 
-function buildCashDiscountMessage(evaluation: CashDiscountEvaluation) {
+function buildCashDiscountMessage(evaluation: CashDiscountEvaluation, replacements: Record<string, string | number>) {
   if (!evaluation.eligible || !evaluation.policy) {
     return "";
   }
 
-  const prefix = evaluation.firstBill
-    ? "Since no older unpaid bill is pending for your account,"
-    : "Since you have cleared all earlier bills,";
+  const policy = evaluation.policy;
+  const template = evaluation.hasOlderUnpaid
+    ? (policy.cdMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date.")
+    : (policy.cdMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit, please remit us the payment by/before the due date");
 
-  return `${prefix} we are giving you CD of ${evaluation.policy.discountPercent}% if this invoice is cleared within ${evaluation.policy.paymentWindowDays} days.`;
+  return fillTemplate(template, replacements);
 }
 
-function buildCashDiscountShortMessage(evaluation: CashDiscountEvaluation) {
+function buildCashDiscountShortMessage(evaluation: CashDiscountEvaluation, replacements: Record<string, string | number>) {
   if (!evaluation.eligible || !evaluation.policy) {
     return "";
   }
 
-  const prefix = evaluation.firstBill
-    ? "Since no older unpaid bill is pending,"
-    : "Since you have cleared all earlier bills,";
+  const policy = evaluation.policy;
+  const template = evaluation.hasOlderUnpaid
+    ? (policy.cdShortMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, pay all older unpaid invoices along with current invoice by/before due date.")
+    : (policy.cdShortMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit, pay by/before due date.");
 
-  return `${prefix} we are giving you CD of ${evaluation.policy.discountPercent}% if paid within ${evaluation.policy.paymentWindowDays} days.`;
+  return fillTemplate(template, replacements);
 }
 
 function getOlderUnpaidDues(due: DueRecord, allDuesForDealer: DueRecord[]) {
@@ -169,25 +172,15 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
   const invoiceNumber = context.due.invoiceNumber || context.due.reference || "N/A";
   const dueDate = context.due.dueDate ? formatDate(context.due.dueDate) : "Not available";
 
-  return {
+  const intermediateReplacements = {
     amount: invoiceAmount,
     billAgeDays: context.billAgeDays,
     billDate: formatDate(billDate),
     companyBillKey: getDuePartyKey(context.due),
     cdDiscountPercent: context.cdEvaluation.policy?.discountPercent ?? (context.rule.triggerDay === 30 ? 3 : context.rule.triggerDay === 45 ? 2 : 0),
     cdEligible: context.cdEvaluation.eligible ? "Eligible" : "Not eligible",
-    cdMessage: buildCashDiscountMessage(context.cdEvaluation),
     cdPolicyWindowDays: context.cdEvaluation.policy?.paymentWindowDays ?? 0,
     cdReason: context.cdEvaluation.reason,
-    cdShortMessage: buildCashDiscountShortMessage(context.cdEvaluation),
-    cdShortSummary: buildCashDiscountShortSummary(context.cdEvaluation),
-    cdSummary: buildCashDiscountSummary(context.cdEvaluation),
-    // Appends " to avail the X% CD Benefit" if eligible, empty string if not.
-    // Used in templates: "pay by/before due date{{cdBenefitSuffix}}."
-    cdBenefitSuffix:
-      context.cdEvaluation.eligible && context.cdEvaluation.policy
-        ? ` to avail the ${context.cdEvaluation.policy.discountPercent}% CD Benefit`
-        : "",
     companyName: context.due.companyName,
     company_name: context.due.companyName,
     contactName:
@@ -215,6 +208,25 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     senderCompany: actualSenderCompany,
     totalDueAmount,
     total_due_amount: totalDueAmount
+  };
+
+  const cdMessage = buildCashDiscountMessage(context.cdEvaluation, intermediateReplacements);
+  const cdShortMessage = buildCashDiscountShortMessage(context.cdEvaluation, intermediateReplacements);
+  const cdSummary = buildCashDiscountSummary(context.cdEvaluation);
+  const cdShortSummary = buildCashDiscountShortSummary(context.cdEvaluation);
+
+  return {
+    ...intermediateReplacements,
+    cdMessage,
+    cdShortMessage,
+    cdSummary,
+    cdShortSummary,
+    // Appends " to avail the X% CD Benefit" if eligible, empty string if not.
+    // Used in templates: "pay by/before due date{{cdBenefitSuffix}}."
+    cdBenefitSuffix:
+      context.cdEvaluation.eligible && context.cdEvaluation.policy
+        ? ` to avail the ${context.cdEvaluation.policy.discountPercent}% CD Benefit`
+        : ""
   };
 }
 
@@ -306,8 +318,8 @@ function composeReminderContent(
   if (!templateIncludesCashDiscountToken(template) && evaluation.eligible) {
     const appendedCashDiscountMessage =
       channel === "email"
-        ? buildCashDiscountMessage(evaluation)
-        : buildCashDiscountShortMessage(evaluation);
+        ? buildCashDiscountMessage(evaluation, replacements)
+        : buildCashDiscountShortMessage(evaluation, replacements);
 
     if (appendedCashDiscountMessage) {
       filledTemplate = `${filledTemplate}\n\n${appendedCashDiscountMessage}`.trim();
@@ -407,45 +419,138 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     )
   ).sort((a, b) => a - b); // ascending
 
-  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100];
+  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125];
 
   const currentRule = rules?.find((r: any) => r.id === log.ruleId);
   // Use log.reminderDay (= rule.triggerDay stored at creation) as fallback — more reliable than billAgeDays
   const currentRuleDay = currentRule ? currentRule.triggerDay : (log.reminderDay || log.billAgeDays || 30);
 
-  const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
-  const nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
-    ? sortedTriggerDays[currentIdx + 1]
-    : 120; // default to 120 / 90+ if last
-
   const today = referenceDate;
-  const getAmountForTriggerDay = (day: number) => {
-    const idx = sortedTriggerDays.indexOf(day);
-    if (idx === -1) {
-      return day === currentRuleDay ? due.amount : 0;
+
+  const policies = database?.cashDiscountPolicies?.filter((p: any) => p.ownerId === due.ownerId) || [];
+  const cdEvaluation = evaluateCashDiscountEligibility(due, allDuesForDealer, policies, today);
+
+  // Initialize rule amount map
+  const ruleAmountMap = new Map<number, number>();
+  for (const r of sortedTriggerDays) {
+    ruleAmountMap.set(r, 0);
+  }
+
+  // Map each invoice in allDuesForDealer to its closest rule
+  for (const entry of allDuesForDealer) {
+    if (entry.amount <= 0) continue;
+    const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+    
+    let closestRuleDay = currentRuleDay;
+    let minDiff = Infinity;
+    for (const r of sortedTriggerDays) {
+      const diff = Math.abs(age - (r - 5));
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestRuleDay = r;
+      }
     }
-    const minAge = idx === 0 ? -Infinity : sortedTriggerDays[idx - 1] + 1;
-    const maxAge = idx === sortedTriggerDays.length - 1 ? Infinity : day;
+    ruleAmountMap.set(closestRuleDay, (ruleAmountMap.get(closestRuleDay) || 0) + entry.amount);
+  }
 
-    return allDuesForDealer
-      .filter((entry) => {
-        const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-        const nominalAge = age + 5; // engine offset: rule triggers 5 days before nominal day
-        return nominalAge >= minAge && nominalAge <= maxAge;
-      })
-      .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-  };
+  // box2Amount is the amount for currentRuleDay
+  const box2Amount = ruleAmountMap.get(currentRuleDay) || 0;
 
-  const box2Amount = getAmountForTriggerDay(currentRuleDay);
-  const box3Amount = getAmountForTriggerDay(nextRuleDay);
+  // Find all other dues for this dealer (excluding the current due.id)
+  const otherDues = allDuesForDealer.filter((entry) => entry.id !== due.id && entry.amount > 0);
+  
+  let nextRuleDay = 125;
+  let box3Amount = 0;
+  let box3Label = "";
+
+  if (otherDues.length > 0) {
+    // Find the oldest invoice age among all other dues
+    const ages = otherDues.map(entry => getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0);
+    const oldestOtherAge = Math.max(...ages);
+
+    if (oldestOtherAge >= 120) {
+      box3Label = `Payment More Than 120 Days`;
+      box3Amount = otherDues
+        .filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120)
+        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      nextRuleDay = 125;
+    } else if (oldestOtherAge >= 90) {
+      box3Label = `Payment More Than 90 Days`;
+      box3Amount = otherDues
+        .filter(entry => {
+          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+          return age >= 90 && age <= 119;
+        })
+        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      nextRuleDay = 95;
+    } else if (oldestOtherAge >= 60) {
+      box3Label = `Payment More Than 60 Days`;
+      box3Amount = otherDues
+        .filter(entry => {
+          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+          return age >= 60 && age <= 89;
+        })
+        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      nextRuleDay = 75;
+    } else {
+      // If oldest other age is less than 60, find the closest active rule trigger day
+      let closestRuleDay = currentRuleDay;
+      let minDiff = Infinity;
+      for (const r of sortedTriggerDays) {
+        const diff = Math.abs(oldestOtherAge - (r - 5));
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestRuleDay = r;
+        }
+      }
+      nextRuleDay = closestRuleDay;
+      box3Label = `Payment Due in ${nextRuleDay} Days`;
+      box3Amount = otherDues
+        .filter(entry => {
+          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
+          let closest = currentRuleDay;
+          let diffMin = Infinity;
+          for (const r of sortedTriggerDays) {
+            const diff = Math.abs(age - (r - 5));
+            if (diff < diffMin) {
+              diffMin = diff;
+              closest = r;
+            }
+          }
+          return closest === nextRuleDay;
+        })
+        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    }
+  } else {
+    // Fallback: next rule in sortedTriggerDays relative to currentRuleDay
+    const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
+    nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
+      ? sortedTriggerDays[currentIdx + 1]
+      : 125;
+    box3Amount = 0;
+    box3Label = nextRuleDay >= 120
+      ? `Payment More Than 120 Days`
+      : nextRuleDay >= 90
+      ? `Payment More Than 90 Days`
+      : nextRuleDay >= 60
+      ? `Payment More Than 60 Days`
+      : `Payment Due in ${nextRuleDay} Days`;
+  }
+
   const calculatedTotalOutstanding = box2Amount + box3Amount;
 
-  const isBox2Cd = currentRuleDay <= 45;
-  const box2Label = `Payment Due in ${currentRuleDay} Days${isBox2Cd ? " (for CD)" : ""}`;
-
-  const box3Label = nextRuleDay > 90
-    ? `Payment Due in 90+ Days`
-    : `Payment Due in ${nextRuleDay} Days`;
+  let box2Label = "";
+  if (currentRuleDay <= 45) {
+    box2Label = cdEvaluation.eligible
+      ? `Payment Due in ${currentRuleDay} Days (for CD)`
+      : `Payment Due in ${currentRuleDay} Days`;
+  } else if (currentRuleDay === 60) {
+    box2Label = `Payment Due in 60 Days`;
+  } else if (currentRuleDay > 60 && currentRuleDay < 90) {
+    box2Label = `Payment More Than 60 Days`;
+  } else {
+    box2Label = `Payment More Than 90 Days`;
+  }
 
   const paragraphs = log.content
     .split(/\n{2,}/)
@@ -453,7 +558,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()));
 
   const dearIdx = paragraphs.findIndex(p => p.trim().startsWith("Dear"));
-  if (dearIdx !== -1) {
+  if (dearIdx !== -1 && currentRuleDay <= 60) {
     paragraphs.splice(dearIdx + 1, 0, `<strong>${box2Label}</strong>`);
   }
 
@@ -535,7 +640,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   `;
 }
 
-function evaluateCashDiscountEligibility(
+export function evaluateCashDiscountEligibility(
   due: DueRecord,
   allDuesForDealer: DueRecord[],
   policies: CashDiscountPolicy[],
@@ -548,7 +653,8 @@ function evaluateCashDiscountEligibility(
       eligible: false,
       firstBill: false,
       policy: null,
-      reason: "Bill date is missing, so CD eligibility could not be evaluated."
+      reason: "Bill date is missing, so CD eligibility could not be evaluated.",
+      hasOlderUnpaid: false
     };
   }
 
@@ -570,15 +676,7 @@ function evaluateCashDiscountEligibility(
     .filter((entry) => entry.amount > 0)
     .sort((left, right) => (left.billDate || left.invoiceDate).localeCompare(right.billDate || right.invoiceDate));
 
-  if (olderUnpaidBills.length > 0) {
-    const oldestPending = olderUnpaidBills[0];
-    return {
-      eligible: false,
-      firstBill: false,
-      policy: null,
-      reason: `Older unpaid invoice ${oldestPending.invoiceNumber || oldestPending.reference || "N/A"} is still open.`
-    };
-  }
+  const hasOlderUnpaid = olderUnpaidBills.length > 0;
 
   const eligiblePolicy =
     policies
@@ -591,18 +689,29 @@ function evaluateCashDiscountEligibility(
       eligible: false,
       firstBill: olderBills.length === 0,
       policy: null,
-      reason: "Bill age is outside every configured cash discount window."
+      reason: "Bill age is outside every configured cash discount window.",
+      hasOlderUnpaid
     };
   }
 
   const firstBill = olderBills.length === 0;
+
+  let reason = "";
+  if (hasOlderUnpaid) {
+    const oldestPending = olderUnpaidBills[0];
+    reason = `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy if older unpaid invoice ${oldestPending.invoiceNumber || oldestPending.reference || "N/A"} is also cleared.`;
+  } else {
+    reason = firstBill
+      ? `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because this is the first active bill on record.`
+      : `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because no older unpaid invoices remain open.`;
+  }
+
   return {
     eligible: true,
     firstBill,
     policy: eligiblePolicy,
-    reason: firstBill
-      ? `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because this is the first active bill on record.`
-      : `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because no older unpaid invoices remain open.`
+    reason,
+    hasOlderUnpaid
   };
 }
 
@@ -662,7 +771,7 @@ export async function getDashboardStats(ownerId: string): Promise<DashboardStats
   };
 }
 
-export async function generateRemindersForUser(ownerId: string, requestedDate?: string) {
+export async function generateRemindersForUser(ownerId: string, requestedDate?: string, forceAllRules = false) {
   return updateDatabase(async (database) => {
     const user = database.users.find((entry) => entry.id === ownerId);
     if (!user) {
@@ -710,9 +819,23 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       );
 
       for (const rule of rules) {
-        // Fire 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is 25 days old)
-        if (billAgeDays !== (rule.triggerDay - 5)) {
-          continue;
+        if (forceAllRules) {
+          if (rules.length === 0) {
+            continue;
+          }
+          const closestRule = rules.reduce((prev, curr) => {
+            const prevDiff = Math.abs(billAgeDays - (prev.triggerDay - 5));
+            const currDiff = Math.abs(billAgeDays - (curr.triggerDay - 5));
+            return currDiff < prevDiff ? curr : prev;
+          });
+          if (rule.id !== closestRule.id) {
+            continue;
+          }
+        } else {
+          // Fire 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is 25 days old)
+          if (billAgeDays !== (rule.triggerDay - 5)) {
+            continue;
+          }
         }
 
         const template = templates.find((entry) => entry.id === rule.templateId);
@@ -751,7 +874,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             billAgeDays,
             cdEligible: cdEvaluation.eligible,
             cdPolicyId: cdEvaluation.policy?.id || "",
-            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
+            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? (rule.triggerDay === 30 ? 3 : rule.triggerDay === 45 ? 2 : 0),
             cdReason: cdEvaluation.reason,
             channel,
             recipient,
@@ -916,7 +1039,7 @@ export async function createManualRemindersForDue(
         billAgeDays,
         cdEligible: cdEvaluation.eligible,
         cdPolicyId: cdEvaluation.policy?.id || "",
-        cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
+        cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? (rule.triggerDay === 30 ? 3 : rule.triggerDay === 45 ? 2 : 0),
         cdReason: cdEvaluation.reason,
         channel,
         recipient,
@@ -1210,8 +1333,13 @@ async function sendInteraktWhatsapp(
 
   // 3. Upload to Google Drive and get shareable public direct download link
   const fileName = `outstanding-statement-${log.id}.pdf`;
-  const mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
-  log.pdfUrl = mediaUrl;
+  let mediaUrl = "";
+  try {
+    mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
+    log.pdfUrl = mediaUrl;
+  } catch (err) {
+    console.error(`Failed to upload PDF statement to Drive/Catbox for log ${log.id}:`, err);
+  }
 
   // 4. Send WhatsApp with the PDF document
   const contactName = due.matchedContactName || due.companyName || "Customer";
@@ -1280,8 +1408,12 @@ async function deliverReminder(
       );
 
       const fileName = `outstanding-statement-${log.id}.pdf`;
-      pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
-      log.pdfUrl = pdfUrl;
+      try {
+        pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
+        log.pdfUrl = pdfUrl;
+      } catch (err) {
+        console.error(`Failed to upload PDF statement to Drive/Catbox for log ${log.id}:`, err);
+      }
     }
 
     await sendEmail(log, settings, due, allDuesForDealer, database, pdfBuffer);
