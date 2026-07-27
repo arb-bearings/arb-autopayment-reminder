@@ -9,13 +9,14 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const generationDate = String(formData.get("generationDate") || "").trim();
   const operationPassword = String(formData.get("operationPassword") || "");
+  const forceAllRules = formData.get("forceAllRules") === "true";
 
   try {
     if (!canDispatchReminders(user)) {
       throw new Error("Reminder generation access denied.");
     }
     await requireOperationPassword(user, "dispatch", operationPassword);
-    const generated = await generateRemindersForUser(user.id, generationDate || undefined);
+    const generated = await generateRemindersForUser(user.id, generationDate || undefined, forceAllRules);
     await recordAuditLog(
       user,
       "Reminder Dispatch",

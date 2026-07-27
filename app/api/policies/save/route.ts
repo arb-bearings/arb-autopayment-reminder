@@ -17,7 +17,11 @@ export async function POST(request: Request) {
     paymentWindowDays: Number(formData.get("paymentWindowDays") || 0),
     discountPercent: Number(formData.get("discountPercent") || 0),
     enabled: formData.get("enabled") === "on",
-    description: String(formData.get("description") || "").trim()
+    description: String(formData.get("description") || "").trim(),
+    cdMessageTemplate: String(formData.get("cdMessageTemplate") || "").trim(),
+    cdMessageWithOlderTemplate: String(formData.get("cdMessageWithOlderTemplate") || "").trim(),
+    cdShortMessageTemplate: String(formData.get("cdShortMessageTemplate") || "").trim(),
+    cdShortMessageWithOlderTemplate: String(formData.get("cdShortMessageWithOlderTemplate") || "").trim()
   };
 
   if (!payload.name || !payload.paymentWindowDays || payload.discountPercent <= 0) {
@@ -41,6 +45,10 @@ export async function POST(request: Request) {
       existing.discountPercent = payload.discountPercent;
       existing.enabled = payload.enabled;
       existing.description = payload.description;
+      existing.cdMessageTemplate = payload.cdMessageTemplate;
+      existing.cdMessageWithOlderTemplate = payload.cdMessageWithOlderTemplate;
+      existing.cdShortMessageTemplate = payload.cdShortMessageTemplate;
+      existing.cdShortMessageWithOlderTemplate = payload.cdShortMessageWithOlderTemplate;
       existing.updatedAt = now;
       return;
     }
@@ -53,6 +61,10 @@ export async function POST(request: Request) {
       discountPercent: payload.discountPercent,
       enabled: payload.enabled,
       description: payload.description,
+      cdMessageTemplate: payload.cdMessageTemplate,
+      cdMessageWithOlderTemplate: payload.cdMessageWithOlderTemplate,
+      cdShortMessageTemplate: payload.cdShortMessageTemplate,
+      cdShortMessageWithOlderTemplate: payload.cdShortMessageWithOlderTemplate,
       createdAt: now,
       updatedAt: now
     });

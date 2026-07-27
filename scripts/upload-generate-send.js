@@ -165,7 +165,8 @@ async function main() {
     console.log('\n--- Step 2: Triggering Reminder Generation ---');
     const genResult = await postRequest('/api/reminders/generate', sessionToken, {
       generationDate: '',
-      operationPassword: ''
+      operationPassword: '',
+      forceAllRules: 'true'
     });
     console.log(`Generation status code: ${genResult.statusCode}`);
     console.log(`Redirect / message: ${genResult.headers.location || 'none'}`);

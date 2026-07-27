@@ -166,6 +166,24 @@ function buildDailyActivityReportHtml(input: {
   );
   const companyCount = new Set(dues.map((entry) => entry.companyName).filter(Boolean)).size;
 
+  // Bucket calculations
+  const getBucketInfo = (minAge: number, maxAge: number) => {
+    const bucketDues = dues.filter((due) => {
+      const age = getBillAgeDays(due.billDate || due.invoiceDate, reportDate) ?? 0;
+      return age >= minAge && age <= maxAge;
+    });
+    const uniqueDealersCount = new Set(bucketDues.map((d) => d.companyName || d.dealerCode).filter(Boolean)).size;
+    const totalOutstandingAmount = bucketDues.reduce((sum, entry) => sum + entry.amount, 0);
+    return { count: uniqueDealersCount, amount: totalOutstandingAmount };
+  };
+
+  const bucket30 = getBucketInfo(30, 44);
+  const bucket45 = getBucketInfo(45, 59);
+  const bucket60 = getBucketInfo(60, 74);
+  const bucket90 = getBucketInfo(75, 90);
+  const bucket90_120 = getBucketInfo(91, 120);
+  const bucket120Plus = getBucketInfo(121, Infinity);
+
   const salespersonRows = Array.from(salespersonGroups.entries()).map(([salesperson, records]) => {
     const amount = records.reduce((sum, entry) => sum + entry.amount, 0);
     return `
@@ -229,24 +247,111 @@ function buildDailyActivityReportHtml(input: {
               <h1 style="margin:8px 0 0;font-size:24px;line-height:1.25;color:#ffffff;">${escapeHtml(day)}</h1>
             </div>
             <div style="padding:22px 26px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 -8px 8px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:24px;">
+                <!-- Row 1: Total -->
                 <tr>
-                  ${buildMetricCard("Dealers", dealerGroups.size)}
-                  ${buildMetricCard("Companies", companyCount)}
-                  ${buildMetricCard("Due Records", dues.length)}
-                  ${buildMetricCard("Reminders Sent", sentLogs.length)}
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Dealers</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(dealerGroups.size)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(totalOutstanding)}</div>
+                    </div>
+                  </td>
                 </tr>
+                <!-- Row 2: 30 days -->
                 <tr>
-                  ${buildMetricCard("Outstanding", totalOutstanding, "#b45309")}
-                  ${buildMetricCard("Overdue Invoices", overdueDues.length, overdueDues.length > 0 ? "#b91c1c" : "#0f766e")}
-                  ${buildMetricCard("Overdue Amount", overdueOutstanding, overdueDues.length > 0 ? "#b91c1c" : "#0f766e")}
-                  ${buildMetricCard("Dispatch Failures", failureCount, failureCount > 0 ? "#b91c1c" : "#0f766e")}
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers in 30 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket30.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket30.amount, currency))}</div>
+                    </div>
+                  </td>
                 </tr>
+                <!-- Row 3: 45 days -->
                 <tr>
-                  ${buildMetricCard("WhatsApp Success", whatsappSuccess, "#0f766e")}
-                  ${buildMetricCard("WhatsApp Failed", whatsappFailed, whatsappFailed > 0 ? "#b91c1c" : "#0f766e")}
-                  ${buildMetricCard("Email Success", emailSuccess, "#0f766e")}
-                  ${buildMetricCard("Email Failed", emailFailed, emailFailed > 0 ? "#b91c1c" : "#0f766e")}
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers in 45 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket45.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket45.amount, currency))}</div>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 4: 60 days -->
+                <tr>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers in 60 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket60.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket60.amount, currency))}</div>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 5: 90 days -->
+                <tr>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers in 90 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket90.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket90.amount, currency))}</div>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 6: between 90-120 days -->
+                <tr>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers in between 90 – 120 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket90_120.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket90_120.amount, currency))}</div>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 7: More Than 120 days -->
+                <tr>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Dealers More Than 120 days</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(bucket120Plus.count)}</div>
+                    </div>
+                  </td>
+                  <td style="width:50%;padding:6px;vertical-align:top;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:65px;">
+                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.2;">Total Outstanding</div>
+                      <div style="font-size:20px;font-weight:800;margin-top:5px;color:#111827;">${escapeHtml(formatCurrency(bucket120Plus.amount, currency))}</div>
+                    </div>
+                  </td>
                 </tr>
               </table>
 
@@ -367,8 +472,9 @@ export function buildSalespersonSummaryText(name: string, dues: DueRecord[], sen
   const currency = dues[0]?.currency || "INR";
 
   const brackets = [
-    { label: "Above 120 Days", min: 120, max: Infinity },
-    { label: "Between 90 and 120 Days", min: 90, max: 119 },
+    { label: "More than 120 Days", min: 121, max: Infinity },
+    { label: "Between 90 and 120 Days", min: 91, max: 120 },
+    { label: "90 Days", min: 90, max: 90 },
     { label: "75 Days", min: 75, max: 89 },
     { label: "60 Days", min: 60, max: 74 },
     { label: "45 Days", min: 45, max: 59 },
@@ -454,8 +560,9 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
   const currency = dues[0]?.currency || "INR";
 
   const brackets = [
-    { label: "Above 120 Days", min: 120, max: Infinity },
-    { label: "Between 90 and 120 Days", min: 90, max: 119 },
+    { label: "More than 120 Days", min: 121, max: Infinity },
+    { label: "Between 90 and 120 Days", min: 91, max: 120 },
+    { label: "90 Days", min: 90, max: 90 },
     { label: "75 Days", min: 75, max: 89 },
     { label: "60 Days", min: 60, max: 74 },
     { label: "45 Days", min: 45, max: 59 },
