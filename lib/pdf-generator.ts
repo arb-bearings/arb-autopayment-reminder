@@ -86,7 +86,7 @@ export function generateOutstandingPDF(
         )
       ).sort((a, b) => a - b); // ascending
 
-      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125];
+      const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 100, 110, 120];
 
       // Find current rule trigger day
       const currentRule = rules?.find((r: any) => r.id === ruleId);
@@ -144,45 +144,71 @@ export function generateOutstandingPDF(
        // Find all other dues for this dealer (excluding the current due.id)
       const otherDues = dues.filter((entry) => entry.id !== matchedDue?.id && entry.amount > 0);
       
-      let nextRuleDay = 125;
+      let nextRuleDay = 120;
       let box3Amount = 0;
       let box3Label = "";
 
-      if (otherDues.length > 0) {
-        // Find the oldest invoice age among all other dues
-        const ages = otherDues.map(entry => getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0);
-        const oldestOtherAge = Math.max(...ages);
+      const currentInvoiceAge = getBillAgeDays(matchedDue?.billDate || matchedDue?.invoiceDate || "", today) || 0;
+      const olderInvoices = otherDues.filter(
+        (entry) => (getBillAgeDays(entry.billDate || entry.invoiceDate || "", today) || 0) > currentInvoiceAge
+      );
 
-        if (oldestOtherAge >= 120) {
+      if (currentRuleDay === 100) {
+        box3Label = `PAYMENT MORE THAN 120 DAYS`;
+        const older120 = olderInvoices.filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate || "", today) || 0) >= 120);
+        if (older120.length > 0) {
+          const sorted120 = [...older120].sort((a, b) => {
+            const ageA = getBillAgeDays(a.billDate || a.invoiceDate || "", today) || 0;
+            const ageB = getBillAgeDays(b.billDate || b.invoiceDate || "", today) || 0;
+            return ageA - ageB;
+          });
+          box3Amount = sorted120[0].amount || 0;
+        } else {
+          box3Amount = 0;
+        }
+        nextRuleDay = 110;
+      } else if (currentRuleDay === 75) {
+        box3Label = `PAYMENT MORE THAN 75 DAYS`;
+        if (olderInvoices.length > 0) {
+          const sortedOlder = [...olderInvoices].sort((a, b) => {
+            const ageA = getBillAgeDays(a.billDate || a.invoiceDate || "", today) || 0;
+            const ageB = getBillAgeDays(b.billDate || b.invoiceDate || "", today) || 0;
+            return ageA - ageB;
+          });
+          box3Amount = sortedOlder[0].amount || 0;
+        } else {
+          box3Amount = 0;
+        }
+        nextRuleDay = 80;
+      } else if (olderInvoices.length > 0) {
+        // General case: find the immediate past older invoice
+        const sortedOlder = [...olderInvoices].sort((a, b) => {
+          const ageA = getBillAgeDays(a.billDate || a.invoiceDate || "", today) || 0;
+          const ageB = getBillAgeDays(b.billDate || b.invoiceDate || "", today) || 0;
+          return ageA - ageB;
+        });
+
+        const immediatePast = sortedOlder[0];
+        box3Amount = immediatePast.amount || 0;
+
+        const immediatePastAge = getBillAgeDays(immediatePast.billDate || immediatePast.invoiceDate || "", today) || 0;
+        if (immediatePastAge >= 120) {
           box3Label = `PAYMENT MORE THAN 120 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120)
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-          nextRuleDay = 125;
-        } else if (oldestOtherAge >= 90) {
+          nextRuleDay = 120;
+        } else if (immediatePastAge >= 90) {
           box3Label = `PAYMENT MORE THAN 90 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              return age >= 90 && age <= 119;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-          nextRuleDay = 95;
-        } else if (oldestOtherAge >= 60) {
+          nextRuleDay = 100;
+        } else if (immediatePastAge >= 75) {
+          box3Label = `PAYMENT MORE THAN 75 DAYS`;
+          nextRuleDay = 80;
+        } else if (immediatePastAge >= 60) {
           box3Label = `PAYMENT MORE THAN 60 DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              return age >= 60 && age <= 89;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
           nextRuleDay = 75;
         } else {
-          // If oldest other age is less than 60, find the closest active rule trigger day
           let closestRuleDay = currentRuleDay;
           let minDiff = Infinity;
           for (const r of sortedTriggerDays) {
-            const diff = Math.abs(oldestOtherAge - (r - 5));
+            const diff = Math.abs(immediatePastAge - (r - 5));
             if (diff < minDiff) {
               minDiff = diff;
               closestRuleDay = r;
@@ -190,28 +216,12 @@ export function generateOutstandingPDF(
           }
           nextRuleDay = closestRuleDay;
           box3Label = `PAYMENT DUE IN ${nextRuleDay} DAYS`;
-          box3Amount = otherDues
-            .filter(entry => {
-              const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-              let closest = currentRuleDay;
-              let diffMin = Infinity;
-              for (const r of sortedTriggerDays) {
-                const diff = Math.abs(age - (r - 5));
-                if (diff < diffMin) {
-                  diffMin = diff;
-                  closest = r;
-                }
-              }
-              return closest === nextRuleDay;
-            })
-            .reduce((sum, entry) => sum + (entry.amount || 0), 0);
         }
       } else {
-        // Fallback: next rule in sortedTriggerDays relative to currentRuleDay
         const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
         nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
           ? sortedTriggerDays[currentIdx + 1]
-          : 125;
+          : 120;
         box3Amount = 0;
         box3Label = nextRuleDay >= 120
           ? `PAYMENT MORE THAN 120 DAYS`
@@ -226,65 +236,102 @@ export function generateOutstandingPDF(
 
       let box2Label = "";
       if (currentRuleDay <= 45) {
-        box2Label = isCdEligible
-          ? `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`
-          : `PAYMENT DUE IN ${currentRuleDay} DAYS`;
+        box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`;
       } else if (currentRuleDay === 60) {
         box2Label = `PAYMENT DUE IN 60 DAYS`;
+      } else if (currentRuleDay === 75) {
+        box2Label = `PAYMENT OVERDUE IN 75 DAYS`;
       } else if (currentRuleDay > 60 && currentRuleDay < 90) {
         box2Label = `PAYMENT MORE THAN 60 DAYS`;
       } else {
         box2Label = `PAYMENT MORE THAN 90 DAYS`;
       }
 
-      const boxWidth = 155;
+      const isTwoBoxes = currentRuleDay === 30 || currentRuleDay === 45;
       const boxHeight = 50;
       const boxY = 165;
 
-      // Box 1: Payment Due in X Days
-      doc.rect(50, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text(box2Label.toUpperCase(), 58, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor(textColor)
-         .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: 140 });
+      if (isTwoBoxes) {
+        const boxWidth = 240;
 
-      // Box 2: Payment Due in Y Days
-      doc.rect(220, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text(box3Label.toUpperCase(), 228, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor("#b45309") // Amber/orange
-         .text(formatCurrencyForPdf(box3Amount, currency), 228, boxY + 26, { width: 140 });
+        // Box 1: Payment Due in X Days
+        doc.rect(50, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box2Label.toUpperCase(), 58, boxY + 12, { width: 224 });
+        doc.fontSize(11)
+           .fillColor(textColor)
+           .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: 224 });
 
-      // Box 3: Total Outstanding
-      doc.rect(390, boxY, boxWidth, boxHeight)
-         .fillColor("#fafafa")
-         .fill()
-         .strokeColor(borderColor)
-         .lineWidth(1)
-         .stroke();
-      doc.fillColor(primaryColor)
-         .font("Helvetica-Bold")
-         .fontSize(6.5)
-         .text("TOTAL OUTSTANDING", 398, boxY + 12, { width: 140 });
-      doc.fontSize(11)
-         .fillColor("#0f766e") // Teal
-         .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 398, boxY + 26, { width: 140 });
+        // Box 3: Total Outstanding
+        doc.rect(305, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text("TOTAL OUTSTANDING", 313, boxY + 12, { width: 224 });
+        doc.fontSize(11)
+           .fillColor("#0f766e") // Teal
+           .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 313, boxY + 26, { width: 224 });
+
+      } else {
+        const boxWidth = 155;
+
+        // Box 1: Payment Due in X Days
+        doc.rect(50, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box2Label.toUpperCase(), 58, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor(textColor)
+           .text(formatCurrencyForPdf(box2Amount, currency), 58, boxY + 26, { width: 140 });
+
+        // Box 2: Payment Due in Y Days
+        doc.rect(220, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text(box3Label.toUpperCase(), 228, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor("#b45309") // Amber/orange
+           .text(formatCurrencyForPdf(box3Amount, currency), 228, boxY + 26, { width: 140 });
+
+        // Box 3: Total Outstanding
+        doc.rect(390, boxY, boxWidth, boxHeight)
+           .fillColor("#fafafa")
+           .fill()
+           .strokeColor(borderColor)
+           .lineWidth(1)
+           .stroke();
+        doc.fillColor(primaryColor)
+           .font("Helvetica-Bold")
+           .fontSize(6.5)
+           .text("TOTAL OUTSTANDING", 398, boxY + 12, { width: 140 });
+        doc.fontSize(11)
+           .fillColor("#0f766e") // Teal
+           .text(formatCurrencyForPdf(calculatedTotalOutstanding, currency), 398, boxY + 26, { width: 140 });
+      }
 
       let currentY = 230;
 
@@ -616,7 +663,8 @@ export function generateSalespersonSummaryPDF(
 
       // Calculate brackets
       const brackets = [
-        { label: "More than 120 Days", min: 121, max: Infinity },
+        { label: "More than 180 Days", min: 181, max: Infinity },
+        { label: "Between 120 and 180 Days", min: 121, max: 180 },
         { label: "Between 90 and 120 Days", min: 91, max: 120 },
         { label: "90 Days", min: 90, max: 90 },
         { label: "75 Days", min: 75, max: 89 },

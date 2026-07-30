@@ -19,13 +19,9 @@ const defaultRuleBlueprints = [
   { name: "80 Day Reminder",  triggerDay: 80 },
   { name: "85 Day Reminder",  triggerDay: 85 },
   { name: "90 Day Reminder",  triggerDay: 90 },
-  { name: "95 Day Reminder",  triggerDay: 95 },
   { name: "100 Day Reminder", triggerDay: 100 },
-  { name: "105 Day Reminder", triggerDay: 105 },
   { name: "110 Day Reminder", triggerDay: 110 },
-  { name: "115 Day Reminder", triggerDay: 115 },
-  { name: "120 Day Reminder", triggerDay: 120 },
-  { name: "125 Day Reminder", triggerDay: 125 }
+  { name: "120 Day Reminder", triggerDay: 120 }
 ];
 
 // ─── CD Policies — 2 only ─────────────────────────────────────────────────────
@@ -155,11 +151,9 @@ Regards,
 }
 
 function buildBody95() {
-  return `INVOICE {{invoiceNumber}}
+  return `Dear {{contactName}},
 
-Dear {{contactName}},
-
-The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.
+The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue. 
 
 As per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.
 
@@ -168,13 +162,11 @@ So please arrange to remit the outstanding payment immediately to ensure the con
 Thank you for your attention in the matter.
 
 Regards,
-{{senderCompany}}`;
+ARB Bearings Limited`;
 }
 
 function buildBody100() {
-  return `INVOICE {{invoiceNumber}}
-
-Dear {{contactName}},
+  return `Dear {{contactName}},
 
 This is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.
 
@@ -183,8 +175,7 @@ Your invoicing has already been stopped due to the outstanding payment. Kindly a
 Thank you for your attention in the matter.
 
 Regards,
-{{senderCompany}}
-*********`;
+ARB Bearings Limited`;
 }
 
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
@@ -217,12 +208,8 @@ function buildWhatsapp90() {
   return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
 }
 
-function buildWhatsapp95() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped effective today. — {{senderCompany}}`;
-}
-
 function buildWhatsapp100() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
 }
 
 // ─── Subject Lines ────────────────────────────────────────────────────────────
@@ -231,10 +218,10 @@ function buildSubject(triggerDay: number) {
   if (triggerDay <= 60) {
     return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
   }
-  if (triggerDay === 90 || triggerDay === 95) {
+  if (triggerDay === 90) {
     return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
   }
-  if (triggerDay >= 100 && triggerDay <= 125) {
+  if (triggerDay >= 100 && triggerDay <= 120) {
     return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
   }
   return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
@@ -251,13 +238,9 @@ function buildEmailBody(triggerDay: number): string {
     case 80: return buildBody80();
     case 85: return buildBody85();
     case 90: return buildBody90();
-    case 95: return buildBody95();
     case 100: return buildBody100();
-    case 105: return buildBody100().replace("95 days", "100 days");
     case 110: return buildBody100().replace("95 days", "105 days");
-    case 115: return buildBody100().replace("95 days", "110 days");
     case 120: return buildBody100().replace("95 days", "115 days");
-    case 125: return buildBody100().replace("95 days", "120 days");
     default:  return buildBody60();
   }
 }
@@ -271,13 +254,9 @@ function buildWhatsappBody(triggerDay: number): string {
     case 80: return buildWhatsapp80();
     case 85: return buildWhatsapp85();
     case 90: return buildWhatsapp90();
-    case 95: return buildWhatsapp95();
     case 100: return buildWhatsapp100();
-    case 105: return buildWhatsapp100().replace("95 days", "100 days");
     case 110: return buildWhatsapp100().replace("95 days", "105 days");
-    case 115: return buildWhatsapp100().replace("95 days", "110 days");
     case 120: return buildWhatsapp100().replace("95 days", "115 days");
-    case 125: return buildWhatsapp100().replace("95 days", "120 days");
     default:  return buildWhatsapp60();
   }
 }
@@ -332,10 +311,10 @@ export function createDefaultRuleSet(ownerId: string) {
     discountPercent: policy.discountPercent,
     enabled: true,
     description: `Customer remains eligible for ${policy.discountPercent}% cash discount when payment is cleared within ${policy.paymentWindowDays} days and no older unpaid invoices exist.`,
-    cdMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit, please remit us the payment by/before the due date",
-    cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date.",
-    cdShortMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit, pay by/before due date.",
-    cdShortMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, pay all older unpaid invoices along with current invoice by/before due date.",
+    cdMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+    cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+    cdShortMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+    cdShortMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
     createdAt: generatedAt,
     updatedAt: generatedAt
   }));

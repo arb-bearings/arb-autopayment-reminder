@@ -37,7 +37,7 @@ async function main() {
 
     console.log(`Total reminder logs: ${doc.reminderLogs?.length || 0}`);
     doc.reminderLogs?.forEach(log => {
-      console.log(`- Company: "${log.companyName}", Status: "${log.status}", Channel: "${log.channel}", Reason: "${log.failureReason || 'N/A'}"`);
+      console.log(`- Dealer: "${log.dealerCode}", Inv: "${log.invoiceNumber}", Day: ${log.reminderDay}, Status: "${log.status}", Channel: "${log.channel}", Reason: "${log.failureReason || 'N/A'}"`);
     });
   } catch (err) {
     console.error('Error:', err);

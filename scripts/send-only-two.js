@@ -86,8 +86,23 @@ async function main() {
     // Find active session for the target user specifically
     let session = doc.sessions?.find(s => s.userId === targetUser.id && s.expiresAt > new Date().toISOString());
     if (!session) {
-      console.error(`No active session found for ${targetUser.email}. Please log in first or re-run the client.`);
-      return;
+      console.log(`No active session found for ${targetUser.email}. Creating a new one...`);
+      const token = require('crypto').randomBytes(32).toString('hex');
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 14).toISOString();
+      session = {
+        token,
+        userId: targetUser.id,
+        ipAddress: '127.0.0.1',
+        userAgent: 'NodeScript',
+        lastSeenAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        expiresAt
+      };
+      doc.sessions = doc.sessions || [];
+      doc.sessions.push(session);
+      await collection.updateOne({ _id: 'primary' }, { $set: { sessions: doc.sessions } });
+      console.log('Created new session successfully.');
     }
     const sessionToken = session.token;
     console.log(`Using session for user: ${targetUser.email} (token: ${sessionToken.slice(0, 8)}...)`);

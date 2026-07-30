@@ -80,6 +80,7 @@ export async function POST(request: Request) {
       template.whatsappBody = payload.whatsappBody;
       template.smsBody = payload.smsBody;
       template.updatedAt = now;
+      template.userEdited = true;
     } else {
       database.templates.push({
         id: finalTemplateId,
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
         emailBody: payload.emailBody,
         whatsappBody: payload.whatsappBody,
         smsBody: payload.smsBody,
-        updatedAt: now
+        updatedAt: now,
+        userEdited: true
       });
     }
     });

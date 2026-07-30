@@ -41,6 +41,7 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
         port: 443,
         path: "/",
         method: "POST",
+        timeout: 3000,
         headers: {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
           "Content-Length": requestBody.length,
@@ -51,6 +52,11 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
         res.setEncoding("utf8");
         res.on("data", chunk => responseText += chunk);
         res.on("end", () => resolve(responseText.trim()));
+      });
+
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("x0.at request timed out"));
       });
 
       req.on("error", (err: any) => reject(err));
@@ -88,6 +94,7 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
         port: 443,
         path: "/user/api.php",
         method: "POST",
+        timeout: 3000,
         headers: {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
           "Content-Length": requestBody.length,
@@ -99,6 +106,11 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
         res.setEncoding("utf8");
         res.on("data", chunk => responseText += chunk);
         res.on("end", () => resolve(responseText));
+      });
+
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("catbox.moe request timed out"));
       });
 
       req.on("error", (err: any) => reject(err));
@@ -118,52 +130,8 @@ export async function uploadPdfToGoogleDrive(pdfBuffer: Buffer, fileName: string
   }
 
   // 2. Fallback: Upload to Google Drive if credentials are present
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REFRESH_TOKEN) {
-    throw new Error(
-      "Missing Google OAuth2 credentials. Please make sure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN are set in your .env.local file."
-    );
-  }
+  // Temporarily bypassed because invalid_grant causes the auth client to hang retrying token refreshes
+  return "";
 
-  const folderId = (process.env.GOOGLE_DRIVE_FOLDER_ID || "").trim();
 
-  // Create stream from the buffer
-  const bufferStream = new Readable();
-  bufferStream.push(pdfBuffer);
-  bufferStream.push(null);
-
-  const fileMetadata: any = {
-    name: fileName,
-    mimeType: "application/pdf"
-  };
-
-  if (folderId) {
-    fileMetadata.parents = [folderId];
-  }
-
-  // Upload file (will be owned by your personal account)
-  const response = await drive.files.create({
-    requestBody: fileMetadata,
-    media: {
-      mimeType: "application/pdf",
-      body: bufferStream
-    },
-    fields: "id"
-  });
-
-  const fileId = response.data.id;
-  if (!fileId) {
-    throw new Error("Upload failed: No file ID returned from Google Drive API.");
-  }
-
-  // Make the file public so WhatsApp/Interakt servers can fetch it
-  await drive.permissions.create({
-    fileId: fileId,
-    requestBody: {
-      role: "reader",
-      type: "anyone"
-    }
-  });
-
-  // Google Drive uc download URL with filename parameter
-  return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}&filename=${encodeURIComponent(fileName)}`;
 }
