@@ -419,7 +419,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     )
   ).sort((a, b) => a - b); // ascending
 
-  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125];
+  const sortedTriggerDays: number[] = activeTriggerDays.length > 0 ? activeTriggerDays : [30, 45, 60, 75, 80, 85, 90, 100, 110, 120];
 
   const currentRule = rules?.find((r: any) => r.id === log.ruleId);
   // Use log.reminderDay (= rule.triggerDay stored at creation) as fallback — more reliable than billAgeDays
@@ -436,12 +436,14 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     ruleAmountMap.set(r, 0);
   }
 
+  const evaluationRuleDay = currentRuleDay;
+
   // Map each invoice in allDuesForDealer to its closest rule
   for (const entry of allDuesForDealer) {
     if (entry.amount <= 0) continue;
     const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
     
-    let closestRuleDay = currentRuleDay;
+    let closestRuleDay = evaluationRuleDay;
     let minDiff = Infinity;
     for (const r of sortedTriggerDays) {
       const diff = Math.abs(age - (r - 5));
@@ -453,51 +455,76 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     ruleAmountMap.set(closestRuleDay, (ruleAmountMap.get(closestRuleDay) || 0) + entry.amount);
   }
 
-  // box2Amount is the amount for currentRuleDay
-  const box2Amount = ruleAmountMap.get(currentRuleDay) || 0;
+  // box2Amount is the amount for evaluationRuleDay
+  const box2Amount = ruleAmountMap.get(evaluationRuleDay) || 0;
 
   // Find all other dues for this dealer (excluding the current due.id)
   const otherDues = allDuesForDealer.filter((entry) => entry.id !== due.id && entry.amount > 0);
-  
-  let nextRuleDay = 125;
+  let nextRuleDay = 120;
   let box3Amount = 0;
   let box3Label = "";
 
-  if (otherDues.length > 0) {
-    // Find the oldest invoice age among all other dues
-    const ages = otherDues.map(entry => getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0);
-    const oldestOtherAge = Math.max(...ages);
+  const currentInvoiceAge = getBillAgeDays(due.billDate || due.invoiceDate, today) || 0;
+  const olderInvoices = otherDues.filter(
+    (entry) => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) > currentInvoiceAge
+  );
 
-    if (oldestOtherAge >= 120) {
+  if (currentRuleDay === 100) {
+    box3Label = `Payment More Than 120 Days`;
+    const older120 = olderInvoices.filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120);
+    if (older120.length > 0) {
+      const sorted120 = [...older120].sort((a, b) => {
+        const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
+        const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
+        return ageA - ageB;
+      });
+      box3Amount = sorted120[0].amount || 0;
+    } else {
+      box3Amount = 0;
+    }
+    nextRuleDay = 110;
+  } else if (currentRuleDay === 75) {
+    box3Label = `Payment More Than 75 Days`;
+    if (olderInvoices.length > 0) {
+      const sortedOlder = [...olderInvoices].sort((a, b) => {
+        const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
+        const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
+        return ageA - ageB;
+      });
+      box3Amount = sortedOlder[0].amount || 0;
+    } else {
+      box3Amount = 0;
+    }
+    nextRuleDay = 80;
+  } else if (olderInvoices.length > 0) {
+    // General case: find the immediate past older invoice
+    const sortedOlder = [...olderInvoices].sort((a, b) => {
+      const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
+      const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
+      return ageA - ageB;
+    });
+
+    const immediatePast = sortedOlder[0];
+    box3Amount = immediatePast.amount || 0;
+
+    const immediatePastAge = getBillAgeDays(immediatePast.billDate || immediatePast.invoiceDate, today) || 0;
+    if (immediatePastAge >= 120) {
       box3Label = `Payment More Than 120 Days`;
-      box3Amount = otherDues
-        .filter(entry => (getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0) >= 120)
-        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      nextRuleDay = 125;
-    } else if (oldestOtherAge >= 90) {
+      nextRuleDay = 120;
+    } else if (immediatePastAge >= 90) {
       box3Label = `Payment More Than 90 Days`;
-      box3Amount = otherDues
-        .filter(entry => {
-          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-          return age >= 90 && age <= 119;
-        })
-        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      nextRuleDay = 95;
-    } else if (oldestOtherAge >= 60) {
+      nextRuleDay = 100;
+    } else if (immediatePastAge >= 75) {
+      box3Label = `Payment More Than 75 Days`;
+      nextRuleDay = 80;
+    } else if (immediatePastAge >= 60) {
       box3Label = `Payment More Than 60 Days`;
-      box3Amount = otherDues
-        .filter(entry => {
-          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-          return age >= 60 && age <= 89;
-        })
-        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
       nextRuleDay = 75;
     } else {
-      // If oldest other age is less than 60, find the closest active rule trigger day
-      let closestRuleDay = currentRuleDay;
+      let closestRuleDay = evaluationRuleDay;
       let minDiff = Infinity;
       for (const r of sortedTriggerDays) {
-        const diff = Math.abs(oldestOtherAge - (r - 5));
+        const diff = Math.abs(immediatePastAge - (r - 5));
         if (diff < minDiff) {
           minDiff = diff;
           closestRuleDay = r;
@@ -505,28 +532,12 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
       }
       nextRuleDay = closestRuleDay;
       box3Label = `Payment Due in ${nextRuleDay} Days`;
-      box3Amount = otherDues
-        .filter(entry => {
-          const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-          let closest = currentRuleDay;
-          let diffMin = Infinity;
-          for (const r of sortedTriggerDays) {
-            const diff = Math.abs(age - (r - 5));
-            if (diff < diffMin) {
-              diffMin = diff;
-              closest = r;
-            }
-          }
-          return closest === nextRuleDay;
-        })
-        .reduce((sum, entry) => sum + (entry.amount || 0), 0);
     }
   } else {
-    // Fallback: next rule in sortedTriggerDays relative to currentRuleDay
-    const currentIdx = sortedTriggerDays.indexOf(currentRuleDay);
+    const currentIdx = sortedTriggerDays.indexOf(evaluationRuleDay);
     nextRuleDay = (currentIdx !== -1 && currentIdx < sortedTriggerDays.length - 1)
       ? sortedTriggerDays[currentIdx + 1]
-      : 125;
+      : 120;
     box3Amount = 0;
     box3Label = nextRuleDay >= 120
       ? `Payment More Than 120 Days`
@@ -540,13 +551,15 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const calculatedTotalOutstanding = box2Amount + box3Amount;
 
   let box2Label = "";
-  if (currentRuleDay <= 45) {
-    box2Label = cdEvaluation.eligible
-      ? `Payment Due in ${currentRuleDay} Days (for CD)`
-      : `Payment Due in ${currentRuleDay} Days`;
-  } else if (currentRuleDay === 60) {
+  if (evaluationRuleDay <= 45) {
+    box2Label = `Payment Due in ${evaluationRuleDay} Days (for CD)`;
+  } else if (evaluationRuleDay === 60) {
     box2Label = `Payment Due in 60 Days`;
-  } else if (currentRuleDay > 60 && currentRuleDay < 90) {
+  } else if (evaluationRuleDay === 75) {
+    box2Label = `Payment Overdue in 75 Days`;
+  } else if (currentRuleDay === 90) {
+    box2Label = `Payment Overdue in 90 Days`;
+  } else if (evaluationRuleDay > 60 && evaluationRuleDay <= 90) {
     box2Label = `Payment More Than 60 Days`;
   } else {
     box2Label = `Payment More Than 90 Days`;
@@ -558,7 +571,7 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
     .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()));
 
   const dearIdx = paragraphs.findIndex(p => p.trim().startsWith("Dear"));
-  if (dearIdx !== -1 && currentRuleDay <= 60) {
+  if (dearIdx !== -1 && evaluationRuleDay <= 60) {
     paragraphs.splice(dearIdx + 1, 0, `<strong>${box2Label}</strong>`);
   }
 
@@ -587,19 +600,21 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
               <!-- Outstanding Summary: Box 1 (Current Rule) → Box 2 (Next Rule) → Box 3 (Total Outstanding as sum of both) -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 -8px 18px;">
                 <tr>
-                  <td style="width:33.33%;padding:8px;">
+                  <td style="width:${(currentRuleDay === 30 || currentRuleDay === 45) ? '50%' : '33.33%'};padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
                       <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">${escapeHtml(box2Label)}</div>
                       <div style="font-size:18px;font-weight:800;margin-top:6px;color:#111827;">${escapeHtml(formatCurrency(box2Amount, currency))}</div>
                     </div>
                   </td>
+                  ${(currentRuleDay !== 30 && currentRuleDay !== 45) ? `
                   <td style="width:33.33%;padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
                       <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">${escapeHtml(box3Label)}</div>
                       <div style="font-size:18px;font-weight:800;margin-top:6px;color:#b45309;">${escapeHtml(formatCurrency(box3Amount, currency))}</div>
                     </div>
                   </td>
-                  <td style="width:33.33%;padding:8px;">
+                  ` : ''}
+                  <td style="width:${(currentRuleDay === 30 || currentRuleDay === 45) ? '50%' : '33.33%'};padding:8px;">
                     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;height:80px;">
                       <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.2;">Total Outstanding</div>
                       <div style="font-size:18px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(formatCurrency(calculatedTotalOutstanding, currency))}</div>
@@ -1445,13 +1460,15 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
     }
     const resolvedSettings = resolveDispatchSettings(settings);
 
-    const logs = database.reminderLogs.filter(
+    const pendingLogs = database.reminderLogs.filter(
       (entry) =>
         workspace.sharedOwnerIds.has(entry.ownerId) &&
         entry.status === "pending" &&
         (!ruleIds || ruleIds.includes(entry.ruleId)) &&
         (!logIds || logIds.includes(entry.id))
     );
+
+    const logs = pendingLogs;
 
     for (const log of logs) {
       try {

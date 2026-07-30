@@ -117,6 +117,7 @@ export type ReminderTemplate = {
   whatsappBody: string;
   smsBody: string;
   updatedAt: string;
+  userEdited?: boolean;
 };
 
 export type DispatchSettings = {
