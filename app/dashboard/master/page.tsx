@@ -59,10 +59,7 @@ export default async function MasterDatabasePage({
               <input name="file" type="file" accept=".xlsx,.xlxs,.xls,.csv" required />
             </label>
 
-            <label className="field">
-              <span>Master database upload password</span>
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-            </label>
+
 
               <label className="field">
                 <span>Import mode</span>

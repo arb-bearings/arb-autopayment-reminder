@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 export default function DashboardError({
+  error,
   reset
 }: {
   error: Error & { digest?: string };
@@ -14,8 +15,8 @@ export default function DashboardError({
         <p className="eyebrow">Workspace unavailable</p>
         <h1>We could not load the dashboard.</h1>
         <p className="hero-copy">
-          Check the production database environment variables and MongoDB network access, then try
-          loading the workspace again.
+          {error?.message ||
+            "Check the database environment variables and MongoDB network access, then try loading the workspace again."}
         </p>
         <div className="hero-actions">
           <button className="button" type="button" onClick={() => reset()}>

@@ -2194,3 +2194,196 @@ button:disabled {
   color: var(--danger);
 }
 
+.bill-age-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: rgba(43, 97, 243, 0.1);
+  color: var(--blue-600);
+  font-weight: 700;
+  font-size: 0.82em;
+  letter-spacing: 0.02em;
+}
+
+/* PDF summary box controls in template form */
+.pdf-box-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .pdf-box-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pdf-box-group {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pdf-box-group-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+/* Unsaved Changes Floating Dock & Backdrop Lock */
+.unsaved-backdrop-lock {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 9998;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.unsaved-changes-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(780px, 92vw);
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+  z-index: 9999;
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 680px) {
+  .unsaved-changes-dock {
+    flex-direction: column;
+    align-items: stretch;
+    bottom: 12px;
+    padding: 14px;
+  }
+}
+
+.unsaved-changes-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.unsaved-icon {
+  font-size: 1.4em;
+}
+
+.unsaved-changes-info strong {
+  display: block;
+  font-size: 0.95em;
+  color: #fbbf24;
+}
+
+.unsaved-changes-info p {
+  margin: 2px 0 0;
+  font-size: 0.8em;
+  color: #94a3b8;
+}
+
+.unsaved-changes-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .unsaved-changes-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.unsaved-password-input {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 0.85em !important;
+  width: 170px;
+}
+
+.unsaved-password-input::placeholder {
+  color: #94a3b8;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translate(-50%, 30px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Premium Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  width: min(520px, 94vw);
+  padding: 30px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  font-size: 1.35em;
+  margin: 0;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5em;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.modal-close-btn:hover {
+  color: #f8fafc;
+}
+

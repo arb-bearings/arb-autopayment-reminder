@@ -46,7 +46,6 @@ export default async function ReminderSettingsPage({
             <PolicyForm policy={policy} />
             <form action="/api/policies/delete" method="post" className="compact-form">
               <input type="hidden" name="policyId" value={policy.id} />
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
               <ProtectedSubmitButton
                 className="button button-ghost"
                 confirmationMessage={`Delete ${policy.name}?`}
@@ -102,23 +101,19 @@ function PolicyForm({
       </label>
       <label className="field rule-span">
         <span>Email/Long CD Message Template (Standard)</span>
-        <textarea name="cdMessageTemplate" rows={2} defaultValue={policy?.cdMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit, please remit us the payment by/before the due date"} required />
+        <textarea name="cdMessageTemplate" rows={2} defaultValue={policy?.cdMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
       </label>
       <label className="field rule-span">
         <span>Email/Long CD Message Template (With Older Pending Bills)</span>
-        <textarea name="cdMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date."} required />
+        <textarea name="cdMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
       </label>
       <label className="field rule-span">
         <span>WhatsApp/Short CD Message Template (Standard)</span>
-        <textarea name="cdShortMessageTemplate" rows={2} defaultValue={policy?.cdShortMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit, pay by/before due date."} required />
+        <textarea name="cdShortMessageTemplate" rows={2} defaultValue={policy?.cdShortMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
       </label>
       <label className="field rule-span">
         <span>WhatsApp/Short CD Message Template (With Older Pending Bills)</span>
-        <textarea name="cdShortMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdShortMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, pay all older unpaid invoices along with current invoice by/before due date."} required />
-      </label>
-      <label className="field rule-span">
-        <span>Admin settings password</span>
-        <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
+        <textarea name="cdShortMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdShortMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
       </label>
       <div className="rule-span">
         <ProtectedSubmitButton className="button">

@@ -115,19 +115,14 @@ export default async function MessageTemplatesPage({
             <article key={rule.id} className="glass-panel">
               <div className="section-heading">
                 <h2>{rule.name}</h2>
-                <p>Triggers when bill age reaches {rule.triggerDay} days.</p>
+                <p>
+                  Triggers when bill age reaches {rule.triggerDay - 5} days{" "}
+                  <span style={{ color: "red", fontWeight: "600" }}>
+                    ({rule.triggerDay} days)
+                  </span>
+                </p>
               </div>
               <RuleForm rule={rule} template={template} />
-              <form action="/api/rules/delete" method="post" className="compact-form">
-                <input type="hidden" name="ruleId" value={rule.id} />
-                <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-                <ProtectedSubmitButton
-                  className="button button-ghost"
-                  confirmationMessage={`Delete ${rule.name}?`}
-                >
-                  Delete rule
-                </ProtectedSubmitButton>
-              </form>
             </article>
           );
         })}
@@ -181,18 +176,98 @@ function RuleForm({ rule, template }: { rule?: ReminderRule; template?: Reminder
         <span>WhatsApp template</span>
         <textarea name="whatsappBody" rows={5} defaultValue={template?.whatsappBody || "Dear {{dealer_name}}, reminder for {{invoice_no}} amount {{invoice_amount}}. Previous due: {{previous_due_amount}}. Total due: {{total_due_amount}}."} required />
       </label>
-      <label className="field">
+      <label className="field rule-span">
         <span>SMS template</span>
         <textarea name="smsBody" rows={5} defaultValue={template?.smsBody || "Reminder {{invoice_no}}: {{invoice_amount}} due. Previous due {{previous_due_amount}}. Total due {{total_due_amount}}."} required />
       </label>
-      <label className="field rule-span">
-        <span>Admin settings password</span>
-        <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-      </label>
+
       <div className="rule-span">
+        <input type="hidden" name="pdfBoxControlsPresent" value="true" />
+        <div className="section-heading" style={{ marginBottom: 8 }}>
+          <h3 style={{ fontSize: "0.95em", margin: 0 }}>Summary boxes (Email & PDF)</h3>
+          <p style={{ margin: "4px 0 0", fontSize: "0.82em", color: "var(--muted)" }}>
+            Control which summary boxes appear in both the email body and PDF attachment, and customise their headings.
+            Leave a heading blank to use the auto-generated text.
+          </p>
+        </div>
+
+        <div className="pdf-box-controls">
+          {/* Box 1 — Current Invoice */}
+          <div className="pdf-box-group">
+            <div className="pdf-box-group-title">
+              <span className="bill-age-badge" style={{ marginRight: 6 }}>Box 1 — Left</span>
+              <span style={{ fontSize: "0.8em", color: "var(--muted)" }}>Current invoice amount</span>
+            </div>
+            <label className="checkbox-field">
+              <input name="pdfBox1Visible" type="checkbox" defaultChecked={(template?.pdfBox1Visible ?? rule?.pdfBox1Visible) !== false} />
+              <span>Show this box</span>
+            </label>
+            <label className="field" style={{ marginTop: 6 }}>
+              <span>Custom heading</span>
+              <input
+                name="pdfBox1Label"
+                placeholder="e.g. PAYMENT DUE IN 30 DAYS (leave blank for auto)"
+                defaultValue={template?.pdfBox1Label || rule?.pdfBox1Label || ""}
+              />
+            </label>
+          </div>
+
+          {/* Box 2 — Older Invoices */}
+          <div className="pdf-box-group">
+            <div className="pdf-box-group-title">
+              <span className="bill-age-badge" style={{ marginRight: 6 }}>Box 2 — Middle</span>
+              <span style={{ fontSize: "0.8em", color: "var(--muted)" }}>Older invoices bucket</span>
+            </div>
+            <label className="checkbox-field">
+              <input name="pdfBox2Visible" type="checkbox" defaultChecked={(template?.pdfBox2Visible ?? rule?.pdfBox2Visible) !== false} />
+              <span>Show this box</span>
+            </label>
+            <label className="field" style={{ marginTop: 6 }}>
+              <span>Custom heading</span>
+              <input
+                name="pdfBox2Label"
+                placeholder="e.g. PAYMENT MORE THAN 90 DAYS (leave blank for auto)"
+                defaultValue={template?.pdfBox2Label || rule?.pdfBox2Label || ""}
+              />
+            </label>
+          </div>
+
+          {/* Box 3 — Total Outstanding */}
+          <div className="pdf-box-group">
+            <div className="pdf-box-group-title">
+              <span className="bill-age-badge" style={{ marginRight: 6 }}>Box 3 — Right</span>
+              <span style={{ fontSize: "0.8em", color: "var(--muted)" }}>Total outstanding</span>
+            </div>
+            <label className="checkbox-field">
+              <input name="pdfBox3Visible" type="checkbox" defaultChecked={(template?.pdfBox3Visible ?? rule?.pdfBox3Visible) !== false} />
+              <span>Show this box</span>
+            </label>
+            <label className="field" style={{ marginTop: 6 }}>
+              <span>Custom heading</span>
+              <input
+                name="pdfBox3Label"
+                placeholder="TOTAL OUTSTANDING (leave blank for auto)"
+                defaultValue={template?.pdfBox3Label || rule?.pdfBox3Label || ""}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="rule-span button-row" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
         <ProtectedSubmitButton className="button">
           Save rule
         </ProtectedSubmitButton>
+        {rule?.id && (
+          <ProtectedSubmitButton
+            formAction="/api/rules/delete"
+            className="button button-ghost"
+            style={{ color: "var(--danger)" }}
+            confirmationMessage={`Delete ${rule.name}?`}
+          >
+            Delete rule
+          </ProtectedSubmitButton>
+        )}
       </div>
     </form>
   );

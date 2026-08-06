@@ -14,6 +14,10 @@ export default async function SalespersonPage({
   const [database, params] = await Promise.all([readDatabase(), searchParams]);
   const workspace = getCompanyWorkspaceContextForUser(database, user);
   const salespersons = database.salespersons.filter((entry) => entry.ownerId === workspace.configOwnerId);
+  const editId = typeof params.edit === "string" ? params.edit : "";
+  const editSalesperson = database.salespersons.find(
+    (entry) => entry.id === editId && entry.ownerId === workspace.configOwnerId
+  );
 
   return (
     <DashboardShell
@@ -53,10 +57,6 @@ export default async function SalespersonPage({
                 <option value="append">Append or update matching salespersons</option>
               </select>
             </label>
-            <label className="field">
-              <span>Admin settings password</span>
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-            </label>
             <div className="button-row">
               <ProtectedSubmitButton className="button">
                 Upload salesperson file
@@ -94,10 +94,6 @@ export default async function SalespersonPage({
             <label className="field">
               <span>Dealer codes</span>
               <textarea name="dealerCodes" rows={6} />
-            </label>
-            <label className="field">
-              <span>Admin settings password</span>
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
             </label>
             <ProtectedSubmitButton className="button">
               Save salesperson
@@ -138,43 +134,15 @@ export default async function SalespersonPage({
                       <td>{entry.dealerCodes.join(", ") || "-"}</td>
                       <td>
                         <div className="table-action-stack">
-                          <details>
-                            <summary className="button button-secondary">Edit</summary>
-                            <form action="/api/salespersons/save" method="post" className="form-stack inline-edit-form">
-                              <input type="hidden" name="salespersonId" value={entry.id} />
-                              <label className="field">
-                                <span>Salesperson name</span>
-                                <input name="name" defaultValue={entry.name} required />
-                              </label>
-                              <label className="field">
-                                <span>Employee ID</span>
-                                <input name="employeeId" defaultValue={entry.employeeId} required />
-                              </label>
-                              <label className="field">
-                                <span>Email</span>
-                                <input name="email" type="email" defaultValue={entry.email} required />
-                              </label>
-                              <label className="field">
-                                <span>Phone number</span>
-                                <input name="phoneNumber" defaultValue={entry.phoneNumber} />
-                              </label>
-                              <label className="field">
-                                <span>Dealer codes</span>
-                                <textarea name="dealerCodes" rows={5} defaultValue={entry.dealerCodes.join("\n")} />
-                              </label>
-                              <label className="field">
-                                <span>Admin settings password</span>
-                                <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-                              </label>
-                              <ProtectedSubmitButton className="button">
-                                Update salesperson
-                              </ProtectedSubmitButton>
-                            </form>
-                          </details>
+                          <a
+                            href={`/dashboard/settings/salespersons?edit=${entry.id}`}
+                            className="button button-secondary"
+                          >
+                            Edit
+                          </a>
 
                           <form action="/api/salespersons/delete" method="post" className="form-stack">
                             <input type="hidden" name="salespersonId" value={entry.id} />
-                            <input name="operationPassword" type="password" minLength={8} placeholder="Admin password" />
                             <ProtectedSubmitButton
                               className="button button-ghost"
                               confirmationMessage={`Delete salesperson ${entry.name}?`}
@@ -192,6 +160,50 @@ export default async function SalespersonPage({
           </div>
         </article>
       </section>
+
+      {editSalesperson && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-slide-up">
+            <div className="modal-header">
+              <h2>Edit Salesperson</h2>
+              <a href="/dashboard/settings/salespersons" className="modal-close-btn" aria-label="Close">
+                &times;
+              </a>
+            </div>
+            <form action="/api/salespersons/save" method="post" className="form-stack">
+              <input type="hidden" name="salespersonId" value={editSalesperson.id} />
+              <label className="field">
+                <span>Salesperson name</span>
+                <input name="name" defaultValue={editSalesperson.name} required autoFocus />
+              </label>
+              <label className="field">
+                <span>Employee ID</span>
+                <input name="employeeId" defaultValue={editSalesperson.employeeId} required />
+              </label>
+              <label className="field">
+                <span>Email</span>
+                <input name="email" type="email" defaultValue={editSalesperson.email} required />
+              </label>
+              <label className="field">
+                <span>Phone number</span>
+                <input name="phoneNumber" defaultValue={editSalesperson.phoneNumber || ""} />
+              </label>
+              <label className="field">
+                <span>Dealer codes</span>
+                <textarea name="dealerCodes" rows={4} defaultValue={editSalesperson.dealerCodes.join("\n")} placeholder="One dealer code per line" />
+              </label>
+              <div className="button-row" style={{ marginTop: 20 }}>
+                <ProtectedSubmitButton className="button">
+                  Update salesperson
+                </ProtectedSubmitButton>
+                <a className="button button-secondary" href="/dashboard/settings/salespersons">
+                  Cancel
+                </a>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

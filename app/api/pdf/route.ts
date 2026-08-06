@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readDatabase } from "@/lib/storage";
 import { getDuePartyKey } from "@/lib/utils";
 import { generateOutstandingPDF } from "@/lib/pdf-generator";
+import { getEmailContentForLog } from "@/lib/reminder-engine";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -35,14 +36,24 @@ export async function GET(request: NextRequest) {
     const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
     const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
+    // Generate the exact reminder notice text for the PDF
+    let messageText = log.content;
+    try {
+      messageText = await getEmailContentForLog(log, due, allDuesForDealer, db);
+    } catch (e) {
+      console.error("Failed to generate email content for PDF route:", e);
+    }
+
     const pdfBuffer = await generateOutstandingPDF(
       customerName,
       dealerCode,
       allDuesForDealer,
       totalAmount,
       currency,
-      undefined,
-      log.dueId
+      messageText,
+      log.dueId,
+      log.ruleId,
+      db
     );
 
     return new Response(new Uint8Array(pdfBuffer), {

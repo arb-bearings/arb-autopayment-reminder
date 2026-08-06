@@ -12,9 +12,18 @@ function getClientPromise() {
   }
 
   if (!global.__mongoClientPromise__) {
-    global.__mongoClientPromise__ = new MongoClient(mongoUri, {
-      serverSelectionTimeoutMS: 5000
+    const promise = new MongoClient(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      retryWrites: true,
+      retryReads: true
     }).connect();
+
+    promise.catch((err) => {
+      console.error("MongoDB connection failed, clearing cache:", err);
+      global.__mongoClientPromise__ = undefined;
+    });
+
+    global.__mongoClientPromise__ = promise;
   }
 
   return global.__mongoClientPromise__;

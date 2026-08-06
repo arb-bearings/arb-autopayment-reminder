@@ -1,6 +1,7 @@
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ChannelLabel } from "@/components/channel-label";
 import { GenerationDateField } from "@/components/generation-date-field";
+import { ProtectedSubmitButton } from "@/components/protected-submit-button";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 import {
   filterSharedCompanyRecords,
@@ -135,35 +136,18 @@ export default async function DispatchPage({
 
             <div className="dispatch-action-stack">
               <form action="/api/reminders/generate" method="post" className="dispatch-form">
+                <input type="hidden" name="forceAllRules" value="true" />
                 <GenerationDateField />
                 <TodayGenerationNotice count={todayGeneratedLogs.length} />
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input
-                    name="operationPassword"
-                    type="password"
-                    minLength={8}
-                    placeholder="At least 8 characters"
-                  />
-                </label>
-                <button className="button" type="submit">
+                <ProtectedSubmitButton className="button" promptOnSubmitOnly={true}>
                   Generate eligible reminders
-                </button>
+                </ProtectedSubmitButton>
               </form>
 
               <form action="/api/reminders/send" method="post" className="dispatch-form">
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input
-                    name="operationPassword"
-                    type="password"
-                    minLength={8}
-                    placeholder="At least 8 characters"
-                  />
-                </label>
-                <button className="button button-secondary" type="submit">
+                <ProtectedSubmitButton className="button button-secondary" promptOnSubmitOnly={true}>
                   Send generated reminders
-                </button>
+                </ProtectedSubmitButton>
               </form>
             </div>
           </article>
@@ -215,16 +199,6 @@ export default async function DispatchPage({
                     ))}
                   </select>
                 </label>
-
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input
-                    name="operationPassword"
-                    type="password"
-                    minLength={8}
-                    placeholder="At least 8 characters"
-                  />
-                </label>
               </div>
 
               <div className="dispatch-toggle-grid">
@@ -232,12 +206,10 @@ export default async function DispatchPage({
                   <input name="channelEmail" type="checkbox" />
                   <span>Email only if checked</span>
                 </label>
-
                 <label className="checkbox-field dispatch-check">
                   <input name="channelWhatsapp" type="checkbox" />
                   <span>WhatsApp only if checked</span>
                 </label>
-
                 <label className="checkbox-field dispatch-check">
                   <input name="channelSms" type="checkbox" />
                   <span>SMS only if checked</span>
@@ -256,9 +228,9 @@ export default async function DispatchPage({
                 </p>
               ) : null}
 
-              <button className="button" type="submit">
+              <ProtectedSubmitButton className="button" promptOnSubmitOnly={true}>
                 Send selected reminder now
-              </button>
+              </ProtectedSubmitButton>
             </form>
           )}
         </article>

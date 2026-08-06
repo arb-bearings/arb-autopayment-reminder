@@ -51,11 +51,6 @@ export default async function PasswordManagementPage({
             </label>
           ))}
 
-          <label className="field rule-span">
-            <span>Admin settings password</span>
-            <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-          </label>
-
           <div className="rule-span">
             <ProtectedSubmitButton className="button">
               Save operation passwords

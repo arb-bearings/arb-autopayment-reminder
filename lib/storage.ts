@@ -249,7 +249,13 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           },
           templateId: toStringValue(rule?.templateId),
           createdAt: toStringValue(rule?.createdAt),
-          updatedAt: toStringValue(rule?.updatedAt)
+          updatedAt: toStringValue(rule?.updatedAt),
+          pdfBox1Visible: rule?.pdfBox1Visible !== undefined ? toBooleanValue(rule.pdfBox1Visible, true) : undefined,
+          pdfBox2Visible: rule?.pdfBox2Visible !== undefined ? toBooleanValue(rule.pdfBox2Visible, true) : undefined,
+          pdfBox3Visible: rule?.pdfBox3Visible !== undefined ? toBooleanValue(rule.pdfBox3Visible, true) : undefined,
+          pdfBox1Label: toStringValue(rule?.pdfBox1Label) || undefined,
+          pdfBox2Label: toStringValue(rule?.pdfBox2Label) || undefined,
+          pdfBox3Label: toStringValue(rule?.pdfBox3Label) || undefined
           });
         })
       : [],
@@ -264,7 +270,13 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           whatsappBody: toStringValue(template?.whatsappBody),
           smsBody: toStringValue(template?.smsBody),
           updatedAt: toStringValue(template?.updatedAt),
-          userEdited: toBooleanValue((template as Record<string, unknown>)?.userEdited, false) || undefined
+          userEdited: toBooleanValue((template as Record<string, unknown>)?.userEdited, false) || undefined,
+          pdfBox1Visible: template?.pdfBox1Visible !== undefined ? toBooleanValue(template.pdfBox1Visible, true) : undefined,
+          pdfBox2Visible: template?.pdfBox2Visible !== undefined ? toBooleanValue(template.pdfBox2Visible, true) : undefined,
+          pdfBox3Visible: template?.pdfBox3Visible !== undefined ? toBooleanValue(template.pdfBox3Visible, true) : undefined,
+          pdfBox1Label: toStringValue(template?.pdfBox1Label) || undefined,
+          pdfBox2Label: toStringValue(template?.pdfBox2Label) || undefined,
+          pdfBox3Label: toStringValue(template?.pdfBox3Label) || undefined
         }))
       : [],
     dispatchSettings: Array.isArray(source.dispatchSettings)
@@ -316,10 +328,10 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           discountPercent: toNumberValue(policy?.discountPercent),
           enabled: toBooleanValue(policy?.enabled, true),
           description: toStringValue(policy?.description),
-          cdMessageTemplate: toStringValue(policy?.cdMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit, please remit us the payment by/before the due date",
-          cdMessageWithOlderTemplate: toStringValue(policy?.cdMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date.",
-          cdShortMessageTemplate: toStringValue(policy?.cdShortMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit, pay by/before due date.",
-          cdShortMessageWithOlderTemplate: toStringValue(policy?.cdShortMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, pay all older unpaid invoices along with current invoice by/before due date.",
+          cdMessageTemplate: toStringValue(policy?.cdMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+          cdMessageWithOlderTemplate: toStringValue(policy?.cdMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+          cdShortMessageTemplate: toStringValue(policy?.cdShortMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+          cdShortMessageWithOlderTemplate: toStringValue(policy?.cdShortMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
           createdAt: toStringValue(policy?.createdAt),
           updatedAt: toStringValue(policy?.updatedAt)
         }))
@@ -485,17 +497,16 @@ function buildMigratedEmailBody(triggerDay: number): string {
         `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
         footer;
     case 85:
-      return base +
-        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at most urgent basis.` +
-        footer;
     case 90:
       return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
+    case 95:
+      return `Dear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 100:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 110:
-      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 120:
-      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -512,7 +523,7 @@ function buildMigratedWhatsappBody(triggerDay: number): string {
   switch (triggerDay) {
     case 30:
     case 45:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
     case 60:
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Please pay before the due date. — {{senderCompany}}`;
     case 75:
@@ -523,6 +534,8 @@ function buildMigratedWhatsappBody(triggerDay: number): string {
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
     case 90:
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
+    case 95:
+      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
     case 100:
       return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
     case 110:
@@ -538,7 +551,7 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
   // Build a map from templateId → rule so we can look up triggerDay per template
   const ruleByTemplateId = new Map(db.reminderRules.map((rule) => [rule.templateId, rule]));
 
-  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 100, 110, 120]);
+  const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100, 110, 120]);
 
   const migratedTemplates = db.templates.map((template) => {
     const rule = ruleByTemplateId.get(template.id);
@@ -580,17 +593,56 @@ function migrateCashDiscountPolicies(db: AppDatabase): AppDatabase {
   return { ...db, cashDiscountPolicies: migrated };
 }
 
-export async function readDatabase() {
-  const collection = await ensureDatabaseDocument();
-  const document = await collection.findOne({ _id: documentId });
+let readPromise: Promise<AppDatabase> | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 2000;
 
-  if (!document) {
-    throw new Error("MongoDB app state document was not found.");
+export function readDatabase(): Promise<AppDatabase> {
+  const now = Date.now();
+  if (readPromise && (now - cacheTimestamp < CACHE_TTL_MS)) {
+    return readPromise;
   }
 
-  const { _id, migratedFromFileAt, updatedAt, ...appDatabase } = document;
-  // Normalize then apply auto-migration for old-format templates and CD policies
-  return migrateTemplates(migrateCashDiscountPolicies(normalizeDatabase(appDatabase)));
+  cacheTimestamp = now;
+  readPromise = (async () => {
+    try {
+      const collection = await ensureDatabaseDocument();
+      const document = await collection.findOne({ _id: documentId });
+
+      if (!document) {
+        throw new Error("MongoDB app state document was not found.");
+      }
+
+      const { _id, migratedFromFileAt, updatedAt, ...appDatabase } = document;
+      // Normalize then apply auto-migration for cash discount policies
+      const normalized = migrateCashDiscountPolicies(normalizeDatabase(appDatabase));
+      
+      // If templatesMigrated has not been run, run it once, save it back, and mark it done.
+      const hasMigrated = (document as any).templatesMigrated === true;
+      if (!hasMigrated) {
+        const migrated = migrateTemplates(normalized);
+        // Write back immediately to mark as migrated
+        await collection.updateOne(
+          { _id: documentId },
+          {
+            $set: {
+              templates: migrated.templates,
+              templatesMigrated: true,
+              updatedAt: new Date().toISOString()
+            }
+          }
+        );
+        return migrated;
+      }
+
+      return normalized;
+    } catch (err) {
+      readPromise = null;
+      throw err;
+    }
+  })();
+
+  return readPromise;
 }
 
 export async function writeDatabase(database: AppDatabase) {
@@ -607,6 +659,10 @@ export async function writeDatabase(database: AppDatabase) {
     },
     { upsert: true }
   );
+
+  // Invalidate cache and update with the newly written data
+  readPromise = Promise.resolve(normalized);
+  cacheTimestamp = Date.now();
 }
 
 export async function updateDatabase<T>(updater: (database: AppDatabase) => T | Promise<T>) {
