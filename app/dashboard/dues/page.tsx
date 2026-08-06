@@ -52,6 +52,8 @@ export default async function DuesPage({
   );
   const canDispatch = canDispatchReminders(user);
 
+
+
   if (dueRecords.length > 0) {
     await ensureStoredDueWorkbook(workspace.workspaceId, user.companyName);
   }
@@ -92,10 +94,7 @@ export default async function DuesPage({
               <input name="file" type="file" accept=".xlsx,.xlxs,.xls,.csv" required />
             </label>
 
-            <label className="field">
-              <span>Due database upload password</span>
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-            </label>
+
 
             <label className="field">
               <span>Import mode</span>
@@ -149,25 +148,19 @@ export default async function DuesPage({
           ) : (
             <div className="stacked-layout">
               <form action="/api/reminders/generate" method="post" className="dispatch-form">
+                <input type="hidden" name="forceAllRules" value="true" />
                 <GenerationDateField />
                 <TodayGenerationNotice count={todayGeneratedLogs.length} />
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-                </label>
-                <ProtectedSubmitButton className="button button-secondary">
+                <ProtectedSubmitButton className="button button-secondary" promptOnSubmitOnly={true}>
                   Generate eligible reminders
                 </ProtectedSubmitButton>
               </form>
 
               <form action="/api/reminders/send" method="post" className="dispatch-form">
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-                </label>
                 <ProtectedSubmitButton
                   className="button"
                   confirmationMessage="Send every pending reminder currently in the queue?"
+                  promptOnSubmitOnly={true}
                 >
                   Send generated queue
                 </ProtectedSubmitButton>
@@ -199,11 +192,6 @@ export default async function DuesPage({
                       </option>
                     ))}
                   </select>
-                </label>
-
-                <label className="field">
-                  <span>Dispatch password</span>
-                  <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
                 </label>
               </div>
 
@@ -237,6 +225,7 @@ export default async function DuesPage({
               <ProtectedSubmitButton
                 className="button"
                 confirmationMessage="Send reminders for every selected due record?"
+                promptOnSubmitOnly={true}
               >
                 Send selected reminders
               </ProtectedSubmitButton>
@@ -249,6 +238,7 @@ export default async function DuesPage({
             />
           )}
         </article>
+
 
         <article id="reminder-queue" className="glass-panel rule-span">
           <div className="section-heading">

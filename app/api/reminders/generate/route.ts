@@ -35,7 +35,11 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Reminder generation failed.";
-    await recordAuditLog(user, "Reminder Dispatch", "failed", message);
+    try {
+      await recordAuditLog(user, "Reminder Dispatch", "failed", message);
+    } catch (auditError) {
+      console.error("Failed to record audit log:", auditError);
+    }
     return NextResponse.redirect(
       new URL(`/dashboard/dues?error=${encodeURIComponent(message)}`, request.url),
       { status: 303 }

@@ -52,10 +52,6 @@ export default async function ReportsPage({
               <span>Report date</span>
               <input name="reportDate" type="date" />
             </label>
-            <label className="field">
-              <span>Report generation password</span>
-              <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-            </label>
             <ProtectedSubmitButton className="button">
               Generate daily report
             </ProtectedSubmitButton>

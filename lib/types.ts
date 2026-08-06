@@ -105,6 +105,13 @@ export type ReminderRule = {
   templateId: string;
   createdAt: string;
   updatedAt: string;
+  // PDF / Email summary box controls (per rule)
+  pdfBox1Visible?: boolean;
+  pdfBox2Visible?: boolean;
+  pdfBox3Visible?: boolean;
+  pdfBox1Label?: string;
+  pdfBox2Label?: string;
+  pdfBox3Label?: string;
 };
 
 export type ReminderTemplate = {
@@ -118,6 +125,13 @@ export type ReminderTemplate = {
   smsBody: string;
   updatedAt: string;
   userEdited?: boolean;
+  // PDF summary box controls (per rule)
+  pdfBox1Visible?: boolean;  // Box 1 (left)  — current invoice amount
+  pdfBox2Visible?: boolean;  // Box 2 (middle) — older invoices bucket
+  pdfBox3Visible?: boolean;  // Box 3 (right)  — total outstanding
+  pdfBox1Label?: string;     // Custom heading; blank = auto-generated
+  pdfBox2Label?: string;
+  pdfBox3Label?: string;
 };
 
 export type DispatchSettings = {

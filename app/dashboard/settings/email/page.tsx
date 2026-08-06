@@ -98,10 +98,6 @@ export default async function EmailConfigurationPage({
             <span>Report recipient emails</span>
             <textarea name="reportRecipients" rows={4} defaultValue={settings.reportRecipients.join("\n")} />
           </label>
-          <label className="field rule-span">
-            <span>Admin settings password</span>
-            <input name="operationPassword" type="password" minLength={8} placeholder="At least 8 characters" />
-          </label>
           <div className="rule-span">
             <ProtectedSubmitButton className="button">
               Save email and report settings

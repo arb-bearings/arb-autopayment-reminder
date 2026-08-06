@@ -12,16 +12,17 @@ import type {
 // The engine fires 5 days BEFORE this day (billAgeDays === triggerDay - 5).
 
 const defaultRuleBlueprints = [
-  { name: "30 Day Reminder",  triggerDay: 30 },
-  { name: "45 Day Reminder",  triggerDay: 45 },
-  { name: "60 Day Reminder",  triggerDay: 60 },
-  { name: "75 Day Reminder",  triggerDay: 75 },
-  { name: "80 Day Reminder",  triggerDay: 80 },
-  { name: "85 Day Reminder",  triggerDay: 85 },
-  { name: "90 Day Reminder",  triggerDay: 90 },
-  { name: "100 Day Reminder", triggerDay: 100 },
-  { name: "110 Day Reminder", triggerDay: 110 },
-  { name: "120 Day Reminder", triggerDay: 120 }
+  { name: "30 Day Reminder",  triggerDay: 30, enabled: true },
+  { name: "45 Day Reminder",  triggerDay: 45, enabled: true },
+  { name: "60 Day Reminder",  triggerDay: 60, enabled: true },
+  { name: "75 Day Reminder",  triggerDay: 75, enabled: true },
+  { name: "80 Day Reminder",  triggerDay: 80, enabled: false },
+  { name: "85 Day Reminder",  triggerDay: 85, enabled: false },
+  { name: "90 Day Reminder",  triggerDay: 90, enabled: true },
+  { name: "95 Day Reminder",  triggerDay: 95, enabled: true },
+  { name: "100 Day Reminder", triggerDay: 100, enabled: true },
+  { name: "110 Day Reminder", triggerDay: 110, enabled: false },
+  { name: "120 Day Reminder", triggerDay: 120, enabled: false }
 ];
 
 // ─── CD Policies — 2 only ─────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ const defaultCashDiscountBlueprints = [
 
 // ─── Email Body Builders ──────────────────────────────────────────────────────
 
-/** 30-day: due in 5 days — CD suffix is dynamic via {{cdBenefitSuffix}} */
+/** 30-day: due in 5 days — CD message is dynamic via {{cdMessage}} */
 function buildBody30() {
   return `INVOICE {{invoiceNumber}}
 
@@ -48,7 +49,7 @@ Regards,
 {{senderCompany}}`;
 }
 
-/** 45-day: due in 5 days — CD suffix is dynamic via {{cdBenefitSuffix}} */
+/** 45-day: due in 5 days — CD message is dynamic via {{cdMessage}} */
 function buildBody45() {
   return `INVOICE {{invoiceNumber}}
 
@@ -155,7 +156,7 @@ function buildBody95() {
 
 The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue. 
 
-As per our company policy, your invoicing will be stopped effective today, as the outstanding payment has not been cleared within the 90-day credit period.
+As per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.
 
 So please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.
 
@@ -181,11 +182,11 @@ ARB Bearings Limited`;
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
 
 function buildWhatsapp30() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp45() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Pay before due date{{cdBenefitSuffix}}. — {{senderCompany}}`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp60() {
@@ -206,6 +207,10 @@ function buildWhatsapp85() {
 
 function buildWhatsapp90() {
   return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
+}
+
+function buildWhatsapp95() {
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
 }
 
 function buildWhatsapp100() {
@@ -238,6 +243,7 @@ function buildEmailBody(triggerDay: number): string {
     case 80: return buildBody80();
     case 85: return buildBody85();
     case 90: return buildBody90();
+    case 95: return buildBody95();
     case 100: return buildBody100();
     case 110: return buildBody100().replace("95 days", "105 days");
     case 120: return buildBody100().replace("95 days", "115 days");
@@ -254,6 +260,7 @@ function buildWhatsappBody(triggerDay: number): string {
     case 80: return buildWhatsapp80();
     case 85: return buildWhatsapp85();
     case 90: return buildWhatsapp90();
+    case 95: return buildWhatsapp95();
     case 100: return buildWhatsapp100();
     case 110: return buildWhatsapp100().replace("95 days", "105 days");
     case 120: return buildWhatsapp100().replace("95 days", "115 days");
@@ -290,7 +297,7 @@ export function createDefaultRuleSet(ownerId: string) {
       ownerId,
       name: rule.name,
       triggerDay: rule.triggerDay,
-      enabled: true,
+      enabled: rule.enabled,
       autoSend: false,
       channels: {
         email: true,
