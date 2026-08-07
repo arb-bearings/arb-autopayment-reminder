@@ -108,17 +108,11 @@ function buildSectionTitle(title: string) {
 }
 
 function getOverdueDays(due: DueRecord, reportDate: Date) {
-  if (!due.dueDate) {
+  const age = getBillAgeDays(due.billDate || due.invoiceDate, reportDate);
+  if (age === null) {
     return 0;
   }
-
-  const dueDate = new Date(due.dueDate);
-
-  if (Number.isNaN(dueDate.getTime())) {
-    return 0;
-  }
-
-  return Math.max(0, daysBetween(dueDate, reportDate));
+  return Math.max(0, age - 60);
 }
 
 function buildDailyActivityReportHtml(input: {
@@ -136,6 +130,7 @@ function buildDailyActivityReportHtml(input: {
     oldestDueDate: string;
     maxOverdueDays: number;
   }>;
+  rules?: ReminderRule[];
 }) {
   const {
     day,
@@ -145,7 +140,8 @@ function buildDailyActivityReportHtml(input: {
     salespersonGroups,
     failedLogs,
     topOutstanding,
-    topOverdue
+    topOverdue,
+    rules
   } = input;
   const reportDate = new Date(day);
   const currency = dues[0]?.currency || "INR";
@@ -169,25 +165,29 @@ function buildDailyActivityReportHtml(input: {
 
   // Returns unique dealer count, total outstanding, and reminders sent today for a bucket
   const getBucketInfo = (minAge: number, maxAge: number) => {
-    const bucketDues = dues.filter((due) => {
-      const age = getBillAgeDays(due.billDate || due.invoiceDate, reportDate) ?? 0;
-      return age >= minAge && age <= maxAge;
-    });
-    const amount = bucketDues.reduce((sum, entry) => sum + entry.amount, 0);
-    const dealerCount = new Set(bucketDues.map((d) => d.companyName || d.dealerCode).filter(Boolean)).size;
-    
-    // Reminders sent today for this bucket
-    const bucketDueIds = new Set(bucketDues.map((d) => d.id));
+    const matchingRules = (rules || []).filter(r => r.triggerDay >= minAge && r.triggerDay <= maxAge);
+    const ruleIds = matchingRules.map(r => r.id);
+
     const sentTodayLogs = todayLogs.filter(
-      (log) => log.status === "sent" && bucketDueIds.has(log.dueId)
+      (log) => log.status === "sent" && (ruleIds.includes(log.ruleId) || (log.reminderDay >= minAge && log.reminderDay <= maxAge))
     );
     const remindersSentToday = sentTodayLogs.length;
+
+    const matchingDueIds = sentTodayLogs.map(log => log.dueId).filter(Boolean);
+    const bucketDues = dues.filter(due => matchingDueIds.includes(due.id));
+    const amount = bucketDues.reduce((sum, entry) => sum + entry.amount, 0);
+
+    const ruleDealerCodes = Array.from(new Set(sentTodayLogs.map(log => log.dealerCode).filter(Boolean)));
+    const dealerCount = ruleDealerCodes.length;
 
     return { amount, dealerCount, remindersSentToday };
   };
 
   const bucketCardRows = agingBuckets.map((b) => {
     const info = getBucketInfo(b.min, b.max);
+    if (info.remindersSentToday === 0) {
+      return "";
+    }
     return `
       <tr>
         <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
@@ -346,9 +346,11 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
   const database = await readDatabase();
   const workspace = getCompanyWorkspaceContextForUser(database, user);
   const day = reportDate.toISOString().slice(0, 10);
-  const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds);
   const logs = filterSharedCompanyRecords(database.reminderLogs, workspace.sharedOwnerIds);
   const todayLogs = logs.filter((entry) => logDay(entry) === day);
+  const todayDueIds = new Set(todayLogs.map((log) => log.dueId).filter(Boolean));
+  const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds)
+    .filter((due) => todayDueIds.has(due.id));
   const dealerGroups = groupBy(dues, (entry) => entry.companyName || entry.dealerCode);
   const salespersonGroups = groupBy(dues, (entry) => entry.salespersonName || entry.salespersonEmail);
   const failedLogs = todayLogs.filter((entry) => entry.status === "failed");
@@ -420,7 +422,8 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
       salespersonGroups,
       failedLogs,
       topOutstanding,
-      topOverdue
+      topOverdue,
+      rules: database.reminderRules
     })
   };
 }
@@ -566,15 +569,21 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
   };
 
   const bucketCardRows = agingBuckets.map((bracket) => {
-    const bucketDues = dues.filter((due) => {
-      const age = getBillAgeDays(due.billDate || due.invoiceDate, today) ?? 0;
-      return age >= bracket.min && (bracket.max === Infinity ? true : age <= bracket.max);
-    });
-    const outstanding = bucketDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
+    const ruleIds = matchingRules.map(r => r.id);
+    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
 
-    const bucketDueIds = new Set(bucketDues.map((d) => d.id));
-    const remindersSentToday = sentLogs.filter((log) => bucketDueIds.has(log.dueId)).length;
-    const dealerCount = new Set(bucketDues.map((d) => d.companyName || d.dealerCode).filter(Boolean)).size;
+    const remindersSentToday = ruleLogs.length;
+    if (remindersSentToday === 0) {
+      return "";
+    }
+
+    const matchingDueIds = ruleLogs.map((log) => log.dueId).filter(Boolean);
+    const ruleDues = dues.filter((due) => matchingDueIds.includes(due.id));
+    const outstanding = ruleDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+    const ruleDealerCodes = Array.from(new Set(ruleLogs.map((log) => log.dealerCode).filter(Boolean)));
+    const dealerCount = ruleDealerCodes.length;
 
     return `
       <tr>
@@ -677,10 +686,17 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         continue;
       }
 
+      const salespersonDueIds = new Set(salespersonLogs.map((log) => log.dueId).filter(Boolean));
+      const activeRecords = records.filter(
+        (due) =>
+          salespersonDueIds.has(due.id) ||
+          salespersonLogs.some((log) => log.dealerCode === due.dealerCode)
+      );
+
       // Generate Salesperson summary PDF
       const pdfBuffer = await generateSalespersonSummaryPDF(
         name,
-        records,
+        activeRecords,
         salespersonLogs,
         database.reminderRules
       );
@@ -697,8 +713,8 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         settings,
         [email],
         `Reminder Summary - ${name}`,
-        buildSalespersonSummaryText(name, records, salespersonLogs, database.reminderRules),
-        buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules),
+        buildSalespersonSummaryText(name, activeRecords, salespersonLogs, database.reminderRules),
+        buildSalespersonSummaryHtml(name, activeRecords, salespersonLogs, database.reminderRules),
         attachments
       );
       results.push({ email, ...result });
@@ -713,8 +729,8 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
           const driveFileName = `reminder-summary-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`;
           const pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, driveFileName);
           const totalOutstanding = formatCurrency(
-            records.reduce((sum, d) => sum + (d.amount || 0), 0),
-            records[0]?.currency || "INR"
+            activeRecords.reduce((sum, d) => sum + (d.amount || 0), 0),
+            activeRecords[0]?.currency || "INR"
           );
 
           await sendSalespersonSummaryWhatsapp(

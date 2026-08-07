@@ -54,6 +54,9 @@ export async function POST(request: Request) {
         .filter(Boolean),
       reportFrequency,
       reportTime: String(formData.get("reportTime") || "18:00").trim(),
+      emailEnabled: formData.get("emailEnabled") === "on",
+      whatsappEnabled: formData.get("whatsappEnabled") === "on",
+      smsEnabled: formData.get("smsEnabled") === "on",
       updatedAt: new Date().toISOString()
     };
 

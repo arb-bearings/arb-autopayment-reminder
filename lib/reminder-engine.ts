@@ -189,7 +189,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     invoiceNumber,
     invoice_no: invoiceNumber,
     openingAmount: formatCurrency(context.due.openingAmount, context.due.currency),
-    overdueDays: context.due.overdueDays,
+    overdueDays: Math.max(0, (context.billAgeDays || 0) - 60),
     previousDueAmount,
     previous_due_amount: previousDueAmount,
     pendingAmount: formatCurrency(context.due.amount, context.due.currency),
@@ -206,24 +206,29 @@ function buildChannelEntries(
   template: ReminderTemplate,
   contact: MasterContact,
   due: DueRecord,
-  channelSelection?: ReminderChannelSelection
+  channelSelection?: ReminderChannelSelection,
+  settings?: DispatchSettings
 ): Array<[ReminderLog["channel"], boolean, string, string]> {
+  const emailGloballyEnabled = settings?.emailEnabled ?? true;
+  const whatsappGloballyEnabled = settings?.whatsappEnabled ?? true;
+  const smsGloballyEnabled = settings?.smsEnabled ?? false;
+
   return [
     [
       "email",
-      channelSelection?.email ?? rule.channels.email,
+      emailGloballyEnabled && (channelSelection?.email ?? rule.channels.email),
       contact.email || due.matchedEmail,
       template.emailBody
     ],
     [
       "whatsapp",
-      channelSelection?.whatsapp ?? rule.channels.whatsapp,
+      whatsappGloballyEnabled && (channelSelection?.whatsapp ?? rule.channels.whatsapp),
       contact.whatsapp || due.matchedWhatsapp,
       template.whatsappBody
     ],
     [
       "sms",
-      channelSelection?.sms ?? rule.channels.sms,
+      smsGloballyEnabled && (channelSelection?.sms ?? rule.channels.sms),
       contact.sms || due.matchedSms,
       template.smsBody
     ]
@@ -391,31 +396,8 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const policies = database?.cashDiscountPolicies?.filter((p: any) => p.ownerId === due.ownerId) || [];
   const cdEvaluation = evaluateCashDiscountEligibility(due, filteredDues, policies, today, currentRuleDay);
 
-  // Initialize rule amount map
-  const ruleAmountMap = new Map<number, number>();
-  for (const r of sortedTriggerDays) {
-    ruleAmountMap.set(r, 0);
-  }
-
-  // Map each invoice in allDuesForDealer to its closest rule
-  for (const entry of allDuesForDealer) {
-    if (entry.amount <= 0) continue;
-    const age = getBillAgeDays(entry.billDate || entry.invoiceDate, today) || 0;
-    
-    let closestRuleDay = currentRuleDay;
-    let minDiff = Infinity;
-    for (const r of sortedTriggerDays) {
-      const diff = Math.abs(age - (r - 5));
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestRuleDay = r;
-      }
-    }
-    ruleAmountMap.set(closestRuleDay, (ruleAmountMap.get(closestRuleDay) || 0) + entry.amount);
-  }
-
-  // box2Amount is the amount for currentRuleDay
-  const box2Amount = ruleAmountMap.get(currentRuleDay) || 0;
+  // Box 1 Amount = amount of the current invoice/due record
+  const box2Amount = due?.amount || 0;
 
   // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)
   const currentInvoiceAge = getBillAgeDays(due?.billDate || due?.invoiceDate || "", today) || 0;
@@ -703,6 +685,9 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
     ).toISOString();
     const created: ReminderLog[] = [];
 
+    const rawSettings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
+    const settings = resolveDispatchSettings(rawSettings ?? { ownerId: workspace.configOwnerId });
+
     for (const due of dues) {
       const contact = findMatchingMasterContact(due, contacts);
       if (!contact) {
@@ -720,23 +705,9 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
 
       for (const rule of rules) {
-        if (forceAllRules) {
-          if (rules.length === 0) {
-            continue;
-          }
-          const closestRule = rules.reduce((prev, curr) => {
-            const prevDiff = Math.abs(billAgeDays - (prev.triggerDay - 5));
-            const currDiff = Math.abs(billAgeDays - (curr.triggerDay - 5));
-            return currDiff < prevDiff ? curr : prev;
-          });
-          if (rule.id !== closestRule.id) {
-            continue;
-          }
-        } else {
-          // Fire 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is 25 days old)
-          if (billAgeDays !== (rule.triggerDay - 5)) {
-            continue;
-          }
+        // Fire EXACTLY 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is exactly 25 days old)
+        if (billAgeDays !== (rule.triggerDay - 5)) {
+          continue;
         }
 
         const template = templates.find((entry) => entry.id === rule.templateId);
@@ -756,7 +727,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           { due, contact, rule, template, cdEvaluation, billAgeDays, paymentSummary },
           user?.companyName || "Your Company"
         );
-        const channelEntries = buildChannelEntries(rule, template, contact, due);
+        const channelEntries = buildChannelEntries(rule, template, contact, due, undefined, settings);
 
         for (const [channel, enabled, recipient, body] of channelEntries) {
           if (!enabled || !recipient) {
@@ -931,7 +902,9 @@ export async function createManualRemindersForDue(
       user?.companyName || "Your Company"
     );
     const created: ReminderLog[] = [];
-    const channelEntries = buildChannelEntries(rule, template, contact, due, channelSelection);
+    const rawSettings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
+    const settings = resolveDispatchSettings(rawSettings ?? { ownerId: workspace.configOwnerId });
+    const channelEntries = buildChannelEntries(rule, template, contact, due, channelSelection, settings);
 
     for (const [channel, enabled, recipient, body] of channelEntries) {
       if (!enabled || !recipient) {
@@ -1262,7 +1235,8 @@ async function sendInteraktWhatsapp(
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
-  const overdueDays = (due.overdueDays || 0).toString();
+  const billAge = getBillAgeDays(due.billDate || due.invoiceDate, new Date()) || 0;
+  const overdueDays = Math.max(0, billAge - 60).toString();
 
   const bodyValues = [contactName, invoiceNumber, formattedAmount, overdueDays];
 
@@ -1371,6 +1345,16 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
 
     for (const log of logs) {
       try {
+        if (log.channel === "email" && !resolvedSettings.emailEnabled) {
+          throw new Error("Email dispatches are globally disabled in settings.");
+        }
+        if (log.channel === "whatsapp" && !resolvedSettings.whatsappEnabled) {
+          throw new Error("WhatsApp dispatches are globally disabled in settings.");
+        }
+        if (log.channel === "sms" && !resolvedSettings.smsEnabled) {
+          throw new Error("SMS dispatches are globally disabled in settings.");
+        }
+
         const due = database.dueRecords.find((entry) => entry.id === log.dueId);
         const allDuesForDealer = due
           ? filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds).filter(

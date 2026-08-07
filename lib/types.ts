@@ -162,6 +162,9 @@ export type DispatchSettings = {
   reportRecipients: string[];
   reportFrequency: "daily" | "weekly" | "monthly" | "manual";
   reportTime: string;
+  emailEnabled: boolean;
+  whatsappEnabled: boolean;
+  smsEnabled: boolean;
   updatedAt: string;
 };
 
