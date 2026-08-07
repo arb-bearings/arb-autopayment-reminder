@@ -77,10 +77,30 @@ export default async function EmailConfigurationPage({
             <span>WhatsApp webhook URL</span>
             <input name="whatsappWebhookUrl" type="url" defaultValue={settings.whatsappWebhookUrl} />
           </label>
-          <p className="dispatch-note dispatch-note-plain rule-span">
+           <p className="dispatch-note dispatch-note-plain rule-span">
             Interakt WhatsApp credentials are read from `INTERAKT_API_KEY`,
             `INTERAKT_TEMPLATE_NAME`, and `INTERAKT_LANGUAGE_CODE`.
           </p>
+          <div className="rule-span" style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.5rem", color: "var(--foreground)" }}>Global Channels Configuration</h3>
+            <p className="muted-copy" style={{ marginBottom: "1rem" }}>
+              Enable or disable reminder dispatches globally for each channel.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "2rem" }}>
+              <label className="checkbox-field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                <input name="emailEnabled" type="checkbox" defaultChecked={settings.emailEnabled ?? true} />
+                <span>Enable Email Dispatches</span>
+              </label>
+              <label className="checkbox-field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                <input name="whatsappEnabled" type="checkbox" defaultChecked={settings.whatsappEnabled ?? true} />
+                <span>Enable WhatsApp Dispatches</span>
+              </label>
+              <label className="checkbox-field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                <input name="smsEnabled" type="checkbox" defaultChecked={settings.smsEnabled ?? false} />
+                <span>Enable SMS Dispatches</span>
+              </label>
+            </div>
+          </div>
           <label className="field">
             <span>Report frequency</span>
             <select name="reportFrequency" defaultValue={settings.reportFrequency}>

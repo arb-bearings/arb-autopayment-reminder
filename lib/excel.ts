@@ -86,14 +86,32 @@ const masterFieldCandidates = {
     "contact person name",
     "contact"
   ],
-  email: ["email", "email id", "mail", "email address"],
+  email: [
+    "email",
+    "email id",
+    "mail",
+    "email address",
+    "e mail by marketing",
+    "email by marketing",
+    "e mail id",
+    "e mail",
+    "marketing email",
+    "marketing e-mail",
+    "marketing mail"
+  ],
   whatsapp: [
     "whatsapp",
     "whatsapp number",
     "wa number",
     "whatsapp no",
     "whatsapp no.",
-    "whatsapp mobile"
+    "whatsapp mobile",
+    "mobile no by marketing",
+    "mobile number by marketing",
+    "mobile by marketing",
+    "phone by marketing",
+    "phone no by marketing",
+    "phone number by marketing"
   ],
   sms: [
     "sms",
@@ -106,7 +124,13 @@ const masterFieldCandidates = {
     "mobile no",
     "mobile no.",
     "contact number",
-    "contact no"
+    "contact no",
+    "mobile no by marketing",
+    "mobile number by marketing",
+    "mobile by marketing",
+    "phone by marketing",
+    "phone no by marketing",
+    "phone number by marketing"
   ],
   alternateContact: ["alternate contact", "secondary contact", "alt contact", "alternate number"],
   notes: ["notes", "remarks", "comment"],
@@ -206,9 +230,38 @@ const dueFieldCandidates = {
 } as const;
 
 const salespersonFieldCandidates = {
-  name: ["salesperson name", "sales person name", "salesperson", "sales person", "name"],
-  employeeId: ["employee id", "salesperson id", "sales person id", "staff id", "id"],
-  email: ["email", "email id", "salesperson email", "sales person email", "mail"],
+  name: [
+    "salesperson name",
+    "sales person name",
+    "salesperson",
+    "sales person",
+    "name",
+    "manager name",
+    "executive name"
+  ],
+  employeeId: [
+    "employee id",
+    "salesperson id",
+    "sales person id",
+    "staff id",
+    "id",
+    "manager code",
+    "executive code"
+  ],
+  email: [
+    "email",
+    "email id",
+    "salesperson email",
+    "sales person email",
+    "mail",
+    "manger mail id",
+    "manager mail id",
+    "executive mail id",
+    "manger email id",
+    "manager email id",
+    "executive email id",
+    "back office mail id"
+  ],
   phoneNumber: ["phone", "phone number", "mobile", "mobile number", "contact number"],
   dealerCodes: [
     "dealers",
@@ -380,20 +433,26 @@ function normalizeRow(row: RawRow) {
 
 function expandGroupedDueRows(rows: RawRow[]) {
   let activePartyName = "";
+  let activeDealerCode = "";
 
   return rows.map((row) => {
     const normalizedRow = normalizeRow(row);
     const rowPartyName = toText(pickValue(normalizedRow, dueFieldCandidates.companyName));
-    const billDate = toDateValue(pickValue(normalizedRow, dueFieldCandidates.billDate));
-    const invoiceNumber = toText(pickValue(normalizedRow, dueFieldCandidates.invoiceNumber));
+    const rowDealerCode = toText(pickValue(normalizedRow, dueFieldCandidates.dealerCode));
 
-    if (rowPartyName && !billDate && !invoiceNumber) {
+    if (rowPartyName || rowDealerCode) {
       activePartyName = rowPartyName;
+      activeDealerCode = rowDealerCode;
     }
 
     if (!rowPartyName && activePartyName) {
       const companyHeader = getExistingRowKey(row, dueFieldCandidates.companyName) || "Party's Name";
       row[companyHeader] = activePartyName;
+    }
+
+    if (!rowDealerCode && activeDealerCode) {
+      const dealerCodeHeader = getExistingRowKey(row, dueFieldCandidates.dealerCode) || "Dealer Code";
+      row[dealerCodeHeader] = activeDealerCode;
     }
 
     return row;
@@ -1127,27 +1186,63 @@ export function parseDealerCodeList(value: string) {
 export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
   const importedAt = new Date().toISOString();
 
-  return rows
+  const parsedEntries = rows
     .map(normalizeRow)
-    .map((row) => ({
-      name: toText(pickValue(row, salespersonFieldCandidates.name)),
-      employeeId: toText(pickValue(row, salespersonFieldCandidates.employeeId)),
-      email: toText(pickValue(row, salespersonFieldCandidates.email)),
-      phoneNumber: toText(pickValue(row, salespersonFieldCandidates.phoneNumber)),
-      dealerCodes: parseDealerCodeList(
+    .map((row) => {
+      const name = toText(pickValue(row, salespersonFieldCandidates.name));
+      const employeeId = toText(pickValue(row, salespersonFieldCandidates.employeeId));
+      const email = toText(pickValue(row, salespersonFieldCandidates.email));
+      const phoneNumber = toText(pickValue(row, salespersonFieldCandidates.phoneNumber));
+      const dealerCodes = parseDealerCodeList(
         toText(pickValue(row, salespersonFieldCandidates.dealerCodes))
-      )
-    }))
-    .filter((entry) => entry.name && entry.email && entry.dealerCodes.length > 0)
-    .map<Salesperson>((entry) => ({
-      id: randomUUID(),
-      ownerId,
-      name: entry.name,
-      employeeId: entry.employeeId || entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      email: entry.email,
-      phoneNumber: entry.phoneNumber,
-      dealerCodes: entry.dealerCodes,
-      createdAt: importedAt,
-      updatedAt: importedAt
-    }));
+      );
+
+      return {
+        name,
+        employeeId: employeeId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        email,
+        phoneNumber,
+        dealerCodes
+      };
+    })
+    .filter((entry) => entry.name && entry.email && entry.dealerCodes.length > 0);
+
+  const groupedMap = new Map<string, {
+    name: string;
+    employeeId: string;
+    email: string;
+    phoneNumber: string;
+    dealerCodesSet: Set<string>;
+  }>();
+
+  for (const entry of parsedEntries) {
+    const key = (entry.employeeId || entry.email || entry.name).trim().toLowerCase();
+    const existing = groupedMap.get(key);
+    if (existing) {
+      entry.dealerCodes.forEach((code) => existing.dealerCodesSet.add(code));
+      if (!existing.phoneNumber && entry.phoneNumber) {
+        existing.phoneNumber = entry.phoneNumber;
+      }
+    } else {
+      groupedMap.set(key, {
+        name: entry.name,
+        employeeId: entry.employeeId,
+        email: entry.email,
+        phoneNumber: entry.phoneNumber,
+        dealerCodesSet: new Set(entry.dealerCodes)
+      });
+    }
+  }
+
+  return Array.from(groupedMap.values()).map<Salesperson>((grouped) => ({
+    id: randomUUID(),
+    ownerId,
+    name: grouped.name,
+    employeeId: grouped.employeeId,
+    email: grouped.email,
+    phoneNumber: grouped.phoneNumber,
+    dealerCodes: Array.from(grouped.dealerCodesSet),
+    createdAt: importedAt,
+    updatedAt: importedAt
+  }));
 }

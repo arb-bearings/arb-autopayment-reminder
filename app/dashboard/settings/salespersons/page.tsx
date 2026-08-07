@@ -101,7 +101,7 @@ export default async function SalespersonPage({
           </form>
         </article>
 
-        <article className="glass-panel">
+        <article className="glass-panel rule-span">
           <div className="section-heading">
             <h2>Current mappings</h2>
             <p>{salespersons.length} salesperson profiles configured.</p>
@@ -131,7 +131,16 @@ export default async function SalespersonPage({
                       <td>{entry.employeeId}</td>
                       <td>{entry.email}</td>
                       <td>{entry.phoneNumber || "-"}</td>
-                      <td>{entry.dealerCodes.join(", ") || "-"}</td>
+                      <td>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", maxWidth: "450px" }}>
+                          {entry.dealerCodes.map((code) => (
+                            <span key={code} className="badge neutral" style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem" }}>
+                              {code}
+                            </span>
+                          ))}
+                          {entry.dealerCodes.length === 0 && "-"}
+                        </div>
+                      </td>
                       <td>
                         <div className="table-action-stack">
                           <a

@@ -666,62 +666,67 @@ export function generateSalespersonSummaryPDF(
         // Draw Table Rows
         let rowIndex = 0;
         dealerMap.forEach((groupDues, dealerName) => {
-          if (currentY > 730) {
-            doc.addPage();
-            currentY = 50;
-
-            // Redraw table headers on new page
-            doc.rect(50, currentY, 495, 18)
-               .fillColor("#f8fafc")
-               .fill();
-            doc.fillColor(textColor).font("Helvetica-Bold").fontSize(8);
-            doc.text("Dealer",            60,  currentY + 5, { width: 140 });
-            doc.text("No. of Invoices",   200, currentY + 5, { width: 70, align: "center" });
-            doc.text("Due Date",          280, currentY + 5, { width: 85 });
-            doc.text("Invoice No.",       375, currentY + 5, { width: 85 });
-            doc.text("Outstanding",       460, currentY + 5, { width: 75, align: "right" });
-
-            doc.strokeColor(borderColor)
-               .lineWidth(0.5)
-               .moveTo(50, currentY + 18)
-               .lineTo(545, currentY + 18)
-               .stroke();
-
-            currentY += 18;
-          }
-
-          // Row background
-          if (rowIndex % 2 === 1) {
-            doc.rect(50, currentY, 495, 18)
-               .fillColor("#fafafa")
-               .fill();
-          }
-
           const dealerAllDuesCount = dues.filter(
             (d) => (d.companyName || d.dealerCode) === dealerName
           ).length;
-          const dueDates = groupDues.map(d => d.dueDate ? formatDate(d.dueDate) : "-").join(", ");
-          const invoiceNos = groupDues.map(d => d.invoiceNumber || d.reference || "-").join(", ");
-          const totalOutstanding = groupDues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-          doc.fillColor(textColor)
-             .font("Helvetica")
-             .fontSize(7.5)
-             .text(dealerName, 60, currentY + 5, { width: 140, height: 10, ellipsis: true })
-             .text(dealerAllDuesCount.toString(), 200, currentY + 5, { width: 70, align: "center" })
-             .text(dueDates, 280, currentY + 5, { width: 85, height: 10, ellipsis: true })
-             .text(invoiceNos, 375, currentY + 5, { width: 85, height: 10, ellipsis: true })
-             .text(formatCurrencyForPdf(totalOutstanding, currency), 460, currentY + 5, { width: 75, align: "right" });
+          groupDues.forEach((due, index) => {
+            if (currentY > 730) {
+              doc.addPage();
+              currentY = 50;
 
-          currentY += 18;
+              // Redraw table headers on new page
+              doc.rect(50, currentY, 495, 18)
+                 .fillColor("#f8fafc")
+                 .fill();
+              doc.fillColor(textColor).font("Helvetica-Bold").fontSize(8);
+              doc.text("Dealer",            60,  currentY + 5, { width: 140 });
+              doc.text("No. of Invoices",   200, currentY + 5, { width: 70, align: "center" });
+              doc.text("Due Date",          280, currentY + 5, { width: 85 });
+              doc.text("Invoice No.",       375, currentY + 5, { width: 85 });
+              doc.text("Outstanding",       460, currentY + 5, { width: 75, align: "right" });
 
-          doc.strokeColor("#f1f5f9")
-             .lineWidth(0.5)
-             .moveTo(50, currentY)
-             .lineTo(545, currentY)
-             .stroke();
+              doc.strokeColor(borderColor)
+                 .lineWidth(0.5)
+                 .moveTo(50, currentY + 18)
+                 .lineTo(545, currentY + 18)
+                 .stroke();
 
-          rowIndex++;
+              currentY += 18;
+            }
+
+            // Row background
+            if (rowIndex % 2 === 1) {
+              doc.rect(50, currentY, 495, 18)
+                 .fillColor("#fafafa")
+                 .fill();
+            }
+
+            const dealerVal = index === 0 ? dealerName : "";
+            const countVal = index === 0 ? dealerAllDuesCount.toString() : "";
+            const dueVal = due.dueDate ? formatDate(due.dueDate) : "-";
+            const invVal = due.invoiceNumber || due.reference || "-";
+            const amountVal = formatCurrencyForPdf(due.amount, currency);
+
+            doc.fillColor(textColor)
+               .font("Helvetica")
+               .fontSize(7.5)
+               .text(dealerVal, 60, currentY + 5, { width: 140, height: 10, ellipsis: true })
+               .text(countVal, 200, currentY + 5, { width: 70, align: "center" })
+               .text(dueVal, 280, currentY + 5, { width: 85, height: 10, ellipsis: true })
+               .text(invVal, 375, currentY + 5, { width: 85, height: 10, ellipsis: true })
+               .text(amountVal, 460, currentY + 5, { width: 75, align: "right" });
+
+            currentY += 18;
+
+            doc.strokeColor("#f1f5f9")
+               .lineWidth(0.5)
+               .moveTo(50, currentY)
+               .lineTo(545, currentY)
+               .stroke();
+
+            rowIndex++;
+          });
         });
 
         currentY += 20; // gap before next aging bracket section

@@ -56,6 +56,14 @@ export function getBillAgeDays(value: string, referenceDate = new Date()) {
   return daysBetween(sourceDate, referenceDate);
 }
 
+export function getOverdueDays(billDateStr: string, referenceDate = new Date()) {
+  const age = getBillAgeDays(billDateStr, referenceDate);
+  if (age === null) {
+    return 0;
+  }
+  return Math.max(0, age - 60);
+}
+
 export function formatElapsedDaysTag(value: string, referenceDate = new Date()) {
   const daysElapsed = getBillAgeDays(value, referenceDate);
 

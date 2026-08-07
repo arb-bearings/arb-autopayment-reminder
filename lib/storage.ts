@@ -316,6 +316,9 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
               : "daily"
           ) as "weekly" | "monthly" | "manual" | "daily",
           reportTime: toStringValue((settings as Record<string, unknown>)?.reportTime) || "18:00",
+          emailEnabled: toBooleanValue(settings?.emailEnabled, true),
+          whatsappEnabled: toBooleanValue(settings?.whatsappEnabled, true),
+          smsEnabled: toBooleanValue(settings?.smsEnabled, false),
           updatedAt: toStringValue(settings?.updatedAt)
         }))
       : [],

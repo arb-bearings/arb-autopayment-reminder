@@ -56,6 +56,9 @@ export function resolveDispatchSettings(
     reportRecipients: settings?.reportRecipients || [],
     reportFrequency: settings?.reportFrequency || "daily",
     reportTime: settings?.reportTime || "18:00",
+    emailEnabled: settings?.emailEnabled ?? true,
+    whatsappEnabled: settings?.whatsappEnabled ?? true,
+    smsEnabled: settings?.smsEnabled ?? false,
     updatedAt: settings?.updatedAt || new Date().toISOString()
   };
 }

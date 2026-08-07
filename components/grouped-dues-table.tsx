@@ -2,7 +2,7 @@
 
 import { useId, useState, useMemo } from "react";
 import type { DueRecord, MasterContact } from "@/lib/types";
-import { formatCurrency, formatDate, formatElapsedDaysTag } from "@/lib/utils";
+import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays } from "@/lib/utils";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 
 interface GroupedDuesTableProps {
@@ -20,6 +20,7 @@ export function GroupedDuesTable({
   const [query, setQuery] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const today = useMemo(() => new Date(), []);
 
   // Group by dealerCode, customerCode, or companyName
   const groupedData = useMemo(() => {
@@ -69,7 +70,8 @@ export function GroupedDuesTable({
         group.totalPending += record.amount || 0;
       }
 
-      if (record.overdueDays > 0) {
+      const dynOverdue = getOverdueDays(record.billDate || record.invoiceDate, today);
+      if (dynOverdue > 0) {
         group.overdueCount += 1;
       } else {
         group.dueCount += 1;
@@ -80,7 +82,7 @@ export function GroupedDuesTable({
       key,
       ...data
     }));
-  }, [dueRecords]);
+  }, [dueRecords, today]);
 
   // Filter based on search query
   const filteredGroups = useMemo(() => {
@@ -217,6 +219,10 @@ export function GroupedDuesTable({
 
   return (
     <div className="grouped-dues-workspace">
+      {/* Hidden inputs for selected dues to ensure standard HTML form submit picks them up */}
+      {Array.from(selectedIds).map((id) => (
+        <input key={id} type="hidden" name="dueIds" value={id} />
+      ))}
       {/* Summary Widgets Dashboard */}
       <div className="dues-stats-dashboard">
         <div className="dues-stat-card">
@@ -373,7 +379,6 @@ export function GroupedDuesTable({
                                       <>
                                         <input
                                           type="checkbox"
-                                          name="dueIds"
                                           value={inv.id}
                                           checked={isSelected}
                                           onChange={() => handleInvoiceSelectToggle(inv.id)}
@@ -389,9 +394,9 @@ export function GroupedDuesTable({
                                 <td>{formatDate(inv.dueDate)}</td>
                                 <td>{formatElapsedDaysTag(inv.billDate || inv.invoiceDate)}</td>
                                 <td>
-                                  {inv.overdueDays > 0 ? (
+                                  {getOverdueDays(inv.billDate || inv.invoiceDate, today) > 0 ? (
                                     <span style={{ color: "var(--danger)", fontWeight: 500 }}>
-                                      {inv.overdueDays} days
+                                      {getOverdueDays(inv.billDate || inv.invoiceDate, today)} days
                                     </span>
                                   ) : (
                                     <span style={{ color: "var(--success)", fontWeight: 500 }}>Current</span>

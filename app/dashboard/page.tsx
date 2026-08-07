@@ -4,7 +4,7 @@ import { filterSharedCompanyRecords, getCompanyWorkspaceContextForUser } from "@
 import { isAdminUser, requireUser } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/reminder-engine";
 import { readDatabase } from "@/lib/storage";
-import { formatCurrency, formatDate, formatElapsedDaysTag } from "@/lib/utils";
+import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays } from "@/lib/utils";
 import type { Route } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -22,6 +22,7 @@ export default async function DashboardOverview({
   ]);
   const workspace = getCompanyWorkspaceContextForUser(database, user);
   const isAdmin = isAdminUser(user);
+  const today = new Date();
 
   const dueRecords = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds)
     .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
@@ -124,8 +125,8 @@ export default async function DashboardOverview({
                       <td>{index + 1}</td>
                       <td>{due.companyName}</td>
                       <td>{due.invoiceNumber || due.reference || "N/A"}</td>
-                      <td>{formatElapsedDaysTag(due.billDate || due.invoiceDate)}</td>
-                      <td>{due.overdueDays > 0 ? `${due.overdueDays} days` : "Current"}</td>
+                      <td>{formatElapsedDaysTag(due.billDate || due.invoiceDate, today)}</td>
+                      <td>{getOverdueDays(due.billDate || due.invoiceDate, today) > 0 ? `${getOverdueDays(due.billDate || due.invoiceDate, today)} days` : "Current"}</td>
                       <td>{formatDate(due.dueDate)}</td>
                       <td>{formatCurrency(due.amount, due.currency)}</td>
                     </tr>
