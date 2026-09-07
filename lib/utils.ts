@@ -92,3 +92,25 @@ export function fillTemplate(
     return String(replacements[key] ?? "");
   });
 }
+
+export function parseEmailList(value: string | undefined | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;\n\r]+/)
+    .map((item) => item.trim())
+    .filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
+}
+
+export function isValidEmailList(value: string | undefined | null): boolean {
+  if (!value || !value.trim()) return false;
+  const emails = parseEmailList(value);
+  const rawTokens = value.split(/[,;\n\r]+/).map((t) => t.trim()).filter(Boolean);
+  return rawTokens.length > 0 && rawTokens.every((t) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t));
+}
+
+export function formatEmailList(value: string | undefined | null): string {
+  if (!value) return "";
+  const parts = value.split(/[,;\n\r]+/).map((p) => p.trim()).filter(Boolean);
+  return parts.join(", ");
+}
+
