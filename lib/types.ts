@@ -166,6 +166,7 @@ export type DispatchSettings = {
   whatsappEnabled: boolean;
   smsEnabled: boolean;
   updatedAt: string;
+  thresholdAmount?: number;
 };
 
 export type CashDiscountPolicy = {
@@ -210,6 +211,13 @@ export type ReminderLog = {
   sentAt: string;
   createdAt: string;
   pdfUrl?: string;
+  dealerName?: string;
+  reminderType?: string;
+  selectedAgeingStage?: string;
+  invoiceIdsInvolved?: string[];
+  relevantAmount?: number;
+  totalOutstanding?: number;
+  thresholdAmount?: number;
 };
 
 export type OperationPasswordKey =

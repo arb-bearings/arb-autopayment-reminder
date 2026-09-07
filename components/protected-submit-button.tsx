@@ -6,6 +6,7 @@ type ProtectedSubmitButtonProps = {
   children: string;
   className?: string;
   confirmationMessage?: string;
+  form?: string;
   formAction?: string;
   style?: React.CSSProperties;
   promptOnSubmitOnly?: boolean;
@@ -15,6 +16,7 @@ export function ProtectedSubmitButton({
   children,
   className,
   confirmationMessage,
+  form,
   formAction,
   style,
   promptOnSubmitOnly = true
@@ -174,6 +176,7 @@ export function ProtectedSubmitButton({
       <button
         ref={buttonRef}
         type="submit"
+        form={form}
         formAction={formAction}
         className={className}
         style={style}

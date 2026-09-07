@@ -49,7 +49,7 @@ async function main() {
     });
     const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
     const currency = due.currency || "INR";
-    const customerName = due.matchedContactName || due.companyName || "Customer";
+    const customerName = due.companyName || due.matchedContactName || "Customer";
     const dealerCode = due.dealerCode || due.customerCode || "-";
 
     const pdfBuffer = await generateOutstandingPDF(

@@ -319,7 +319,8 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           emailEnabled: toBooleanValue(settings?.emailEnabled, true),
           whatsappEnabled: toBooleanValue(settings?.whatsappEnabled, true),
           smsEnabled: toBooleanValue(settings?.smsEnabled, false),
-          updatedAt: toStringValue(settings?.updatedAt)
+          updatedAt: toStringValue(settings?.updatedAt),
+          thresholdAmount: settings?.thresholdAmount !== undefined ? toNumberValue(settings.thresholdAmount, 10000) : 10000
         }))
       : [],
     cashDiscountPolicies: Array.isArray(source.cashDiscountPolicies)
@@ -374,7 +375,14 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             content: toStringValue(log?.content),
             failureReason: toStringValue(log?.failureReason),
             sentAt: toStringValue(log?.sentAt),
-            createdAt: toStringValue(log?.createdAt)
+            createdAt: toStringValue(log?.createdAt),
+            dealerName: toStringValue(log?.dealerName),
+            reminderType: toStringValue(log?.reminderType),
+            selectedAgeingStage: toStringValue(log?.selectedAgeingStage),
+            invoiceIdsInvolved: Array.isArray(log?.invoiceIdsInvolved) ? log.invoiceIdsInvolved.map(toStringValue) : [],
+            relevantAmount: log?.relevantAmount !== undefined ? toNumberValue(log.relevantAmount) : undefined,
+            totalOutstanding: log?.totalOutstanding !== undefined ? toNumberValue(log.totalOutstanding) : undefined,
+            thresholdAmount: log?.thresholdAmount !== undefined ? toNumberValue(log.thresholdAmount) : undefined
           };
         })
       : []
@@ -472,79 +480,82 @@ async function ensureDatabaseDocument() {
 // Idempotent: new-format templates are never re-migrated.
 
 function buildMigratedEmailBody(triggerDay: number): string {
-  const base = `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\n`;
-  const footer = `\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}`;
+  const base = `Dear {{contactName}},\n\n`;
+  const footer = `\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
 
   switch (triggerDay) {
     case 30:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
-        `{{cdMessage}}` +
+        `Please note that a payment of {{amount}} is due within the next 5 days to avail the 3% CD benefit on the invoice.\n\n` +
+        `To avail the 3% CD, please ensure that the payment is made before the invoice completes 30 days.` +
         footer;
     case 45:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days.\n\n` +
-        `{{cdMessage}}` +
+        `Please note that a payment of {{amount}} is due within the next 5 days to avail the 2% CD benefit on the invoice.\n\n` +
+        `To avail the 2% CD, please ensure that the payment is made before the invoice completes 45 days.` +
         footer;
     case 60:
       return base +
-        `Please note that the payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} will become due within the next 5 days & Total Outstanding Rs. {{totalDueAmount}}.\n\n` +
-        `So kindly arrange to remit us the total outstanding by/before the due date, as per ARB’s payment Terms.` +
+        `Please note that a payment of {{amount}} will become due within the next 5 days, and the total outstanding amount is {{totalDueAmount}}.\n\n` +
+        `We kindly request you to arrange payment of the due amount of {{amount}} by/before the due date, as per ARB’s payment terms.` +
         footer;
     case 75:
       return base +
-        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now & Total Outstanding is Rs. {{totalDueAmount}}.\n\nSo kindly arrange to remit us the payment at earliest possible.` +
+        `Please note that the payment of {{amount}} against the invoice is now overdue (has exceeded 60 days), and the total outstanding amount is {{totalDueAmount}}.\n\n` +
+        `We kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest.` +
         footer;
     case 80:
       return base +
-        `The payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
+        `The payment more than 80 days of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
         footer;
     case 85:
+      return `Dear {{contactName}},\n\nThe payment more than 85 days of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
     case 90:
-      return `INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain stopped until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 95:
-      return `Dear {{contactName}},\n\nThe payment against the Invoice {{invoiceNumber}} Dated {{billDate}} of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThe payment more than 95 days of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 100:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 100 days, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 110:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 110 days, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 120:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 120 days, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
 }
 
 function buildMigratedEmailSubject(triggerDay: number): string {
-  if (triggerDay <= 60) return `Outstanding: Invoice {{invoiceNumber}} due in 5 days`;
-  if (triggerDay === 90) return `Critical: Invoice {{invoiceNumber}} — Future Invoicing at Risk`;
-  if (triggerDay >= 100 && triggerDay <= 120) return `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`;
-  return `Overdue: Invoice {{invoiceNumber}} — Immediate Attention Required`;
+  if (triggerDay <= 60) return `Outstanding: Payment more than ${triggerDay} days due in 5 days`;
+  if (triggerDay === 90) return `Critical: Payment more than 90 days — Future Invoicing at Risk`;
+  if (triggerDay >= 100 && triggerDay <= 120) return `Invoicing Stopped: Payment more than ${triggerDay} days — Immediate Attention Required`;
+  return `Overdue: Payment more than ${triggerDay} days — Immediate Attention Required`;
 }
 
 function buildMigratedWhatsappBody(triggerDay: number): string {
   switch (triggerDay) {
     case 30:
+      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 3% CD. Ensure payment before 30 days. — ARB Bearings Limited`;
     case 45:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. {{cdMessage}} — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 2% CD. Ensure payment before 45 days. — ARB Bearings Limited`;
     case 60:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, payment for Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is due in 5 days. Please pay before the due date. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days. Total outstanding is {{totalDueAmount}}. Please pay before due date. — ARB Bearings Limited`;
     case 75:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Please pay at earliest possible. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment of {{amount}} against invoice is overdue. Total outstanding is {{totalDueAmount}}. Please pay at earliest. — ARB Bearings Limited`;
     case 80:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 80 days of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — {{senderCompany}}`;
     case 85:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 85 days of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
     case 90:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is significantly overdue. Pay within 5 days or future invoicing will be stopped. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment of {{amount}} is significantly overdue. Invoicing will remain stopped until paid. — ARB Bearings Limited`;
     case 95:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
+      return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
     case 100:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
+      return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
     case 110:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 105 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 110 days of Rs. {{amount}} is 105 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
     case 120:
-      return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 115 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 120 days of Rs. {{amount}} is 115 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -621,7 +632,7 @@ export function readDatabase(): Promise<AppDatabase> {
       const normalized = migrateCashDiscountPolicies(normalizeDatabase(appDatabase));
       
       // If templatesMigrated has not been run, run it once, save it back, and mark it done.
-      const hasMigrated = (document as any).templatesMigrated === true;
+      const hasMigrated = (document as any).templatesMigratedV2 === true;
       if (!hasMigrated) {
         const migrated = migrateTemplates(normalized);
         // Write back immediately to mark as migrated
@@ -630,7 +641,7 @@ export function readDatabase(): Promise<AppDatabase> {
           {
             $set: {
               templates: migrated.templates,
-              templatesMigrated: true,
+              templatesMigratedV2: true,
               updatedAt: new Date().toISOString()
             }
           }

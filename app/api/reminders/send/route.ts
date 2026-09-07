@@ -15,6 +15,8 @@ export async function POST(request: Request) {
   const dueIds = formData.getAll("dueIds").map((entry) => String(entry).trim()).filter(Boolean);
   const ruleId = String(formData.get("ruleId") || "").trim();
   const bulkSelection = String(formData.get("bulkSelection") || "");
+  const logIds = formData.getAll("logIds").map((entry) => String(entry).trim()).filter(Boolean);
+  const isQueueSend = formData.get("isQueueSend") === "true";
   const operationPassword = String(formData.get("operationPassword") || "");
   const selectedChannels = {
     email: formData.get("channelEmail") === "on",
@@ -70,7 +72,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const logs = await sendPendingReminders(user.id);
+    let logs;
+    if (isQueueSend) {
+      if (logIds.length === 0) {
+        throw new Error("Select at least one reminder from the queue before sending.");
+      }
+      logs = await sendPendingReminders(user.id, undefined, logIds);
+    } else {
+      logs = await sendPendingReminders(user.id);
+    }
     const salespersonSummaries = await sendSalespersonSummaries(user, logs);
     const ownerReport = await sendDailyActivityReport(user);
     await recordAuditLog(

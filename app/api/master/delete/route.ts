@@ -16,9 +16,6 @@ export async function POST(request: Request) {
       database.masterContacts = database.masterContacts.filter(
         (entry) => !sharedOwnerIds.has(entry.ownerId)
       );
-      database.reminderLogs = database.reminderLogs.filter(
-        (entry) => !sharedOwnerIds.has(entry.ownerId)
-      );
     });
 
     return NextResponse.redirect(

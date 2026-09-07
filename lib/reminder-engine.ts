@@ -26,11 +26,13 @@ import {
   formatDate,
   getDuePartyKey,
   getBillAgeDays,
-  normalizeText
+  normalizeText,
+  daysBetween
 } from "@/lib/utils";
 import { sendPaymentReminder } from "@/services/interaktService";
 import { generateOutstandingPDF } from "./pdf-generator";
 import { uploadPdfToGoogleDrive } from "@/services/googleDriveService";
+import { buildEmailBody, buildWhatsappBody } from "@/lib/defaults";
 
 type ReminderContext = {
   due: DueRecord;
@@ -58,6 +60,51 @@ type PaymentSummary = {
   totalDue: number;
   previousDues: DueRecord[];
 };
+
+export function calculateDynamicDays(age: number, ruleTriggerDay: number): number {
+  if (ruleTriggerDay === 30) {
+    if (age < 25) return 25 - age;
+    return Math.max(0, 30 - age);
+  }
+  if (ruleTriggerDay === 45) {
+    if (age < 40) return 40 - age;
+    return Math.max(0, 45 - age);
+  }
+  if (ruleTriggerDay === 60) {
+    if (age < 50) return 50 - age;
+    return Math.max(0, 60 - age);
+  }
+  return Math.max(0, ruleTriggerDay - age);
+}
+
+export function calculateRuleOutstanding(dues: DueRecord[], ruleTriggerDay: number, today: Date = new Date()): number {
+  return dues.reduce((sum, due) => {
+    const age = getBillAgeDays(due.billDate || due.invoiceDate, today);
+    if (age === null || !(due.amount > 0)) return sum;
+
+    let inBucket = false;
+    if (ruleTriggerDay === 30) {
+      inBucket = (age >= 25 && age <= 30);
+    } else if (ruleTriggerDay === 45) {
+      inBucket = (age >= 40 && age <= 45);
+    } else if (ruleTriggerDay === 60) {
+      inBucket = (age > 50 && age <= 60);
+    } else if (ruleTriggerDay === 75) {
+      inBucket = (age > 60 && age <= 90);
+    } else if (ruleTriggerDay === 90) {
+      inBucket = (age > 90 && age <= 120);
+    } else if (ruleTriggerDay === 120) {
+      inBucket = (age > 120);
+    } else {
+      inBucket = (age === ruleTriggerDay);
+    }
+
+    if (inBucket) {
+      return sum + (due.amount || 0);
+    }
+    return sum;
+  }, 0);
+}
 
 function escapeHtml(value: string | number) {
   return String(value)
@@ -174,9 +221,9 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     companyName: context.due.companyName,
     company_name: context.due.companyName,
     contactName:
-      context.contact.primaryContact ||
-      context.due.matchedContactName ||
-      "Accounts Team",
+      (context.contact.primaryContact && context.contact.primaryContact !== "Accounts Team")
+        ? context.contact.primaryContact
+        : (context.due.companyName || "Accounts Team"),
     currentInvoiceDueAmount,
     current_invoice_due_amount: currentInvoiceDueAmount,
     daysBeforeDue: context.rule.triggerDay,
@@ -295,26 +342,23 @@ function composeReminderContent(
       paymentSummaryText = [
         "",
         "Outstanding Summary:",
-        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
-        `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
-        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`,
+        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`
       ].join("\n");
     } else if (channel === "whatsapp") {
       paymentSummaryText = [
         "",
         "*Outstanding Summary*:",
-        `*Total outstanding*: ${formatCurrency(paymentSummary.totalDue, currency)}`,
-        `*Previous outstanding*: ${formatCurrency(paymentSummary.previousDue, currency)}`,
-        `*Current outstanding*: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+        `*Current outstanding*: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`,
+        `*Total outstanding*: ${formatCurrency(paymentSummary.totalDue, currency)}`
       ].join("\n");
     } else {
       // SMS
       paymentSummaryText = [
         "",
         "Outstanding Summary:",
-        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`,
-        `Previous outstanding: ${formatCurrency(paymentSummary.previousDue, currency)}`,
-        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`
+        `Current outstanding: ${formatCurrency(paymentSummary.currentInvoiceDue, currency)}`,
+        `Total outstanding: ${formatCurrency(paymentSummary.totalDue, currency)}`
       ].join("\n");
     }
 
@@ -324,25 +368,66 @@ function composeReminderContent(
   return filledTemplate;
 }
 
-function buildBasicEmailHtml(content: string) {
+export function buildBasicEmailHtml(content: string) {
   return `
     <!doctype html>
-    <html>
-      <body style="margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-        <div style="max-width:680px;margin:0 auto;padding:28px 18px;">
-          <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:24px;">
-            ${content
-              .split(/\n{2,}/)
-              .map((paragraph) => `<p style="margin:0 0 14px;line-height:1.55;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
-              .join("")}
-          </div>
-        </div>
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+        <title>Payment Notification</title>
+        <style>
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            background-color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          @media screen and (max-width: 640px) {
+            .email-outer-wrap {
+              padding: 12px 8px !important;
+            }
+            .email-card {
+              border-radius: 6px !important;
+              padding: 18px 14px !important;
+            }
+            p {
+              font-size: 14px !important;
+              line-height: 1.55 !important;
+            }
+          }
+        </style>
+      </head>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#f1f5f9;">
+          <tr>
+            <td align="center" class="email-outer-wrap" style="padding:24px 12px;">
+              <div class="email-card" style="max-width:640px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:24px 22px;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                ${content
+                  .split(/\n{2,}/)
+                  .map((paragraph) => `<p style="margin:0 0 14px;line-height:1.6;font-size:15px;color:#334155;word-break:break-word;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+                  .join("")}
+              </div>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
 }
 
-function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDealer: DueRecord[], database?: any) {
+export function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDealer: DueRecord[], database?: any) {
   const referenceDate = log.sentAt ? new Date(log.sentAt) : (log.createdAt ? new Date(log.createdAt) : new Date());
 
   // Keep all pending invoices for the dealer (no 90 days limit)
@@ -359,17 +444,27 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
 
   const invoiceRows = sortedDealerDues.map((entry) => {
     const isCurrent = entry.id === due.id;
-    const rowBg = isCurrent ? "background:#fefce8;" : "";
-    const fontWeight = isCurrent ? "font-weight:700;" : "";
     const billAge = getBillAgeDays(entry.billDate || entry.invoiceDate, referenceDate);
     const ageText = billAge !== null ? `${billAge} days` : "N/A";
 
+    let bgStyle = "background:#ffffff;"; // default to white
+    if (billAge !== null) {
+      if (billAge > 90) {
+        bgStyle = "background:#fee2e2;"; // soft red
+      } else if (billAge >= 60 && billAge <= 90) {
+        bgStyle = "background:#fef9c3;"; // soft yellow
+      }
+    }
+    const rowBg = bgStyle;
+    const fontWeight = isCurrent ? "font-weight:700;" : "";
+    const borderLeft = isCurrent ? "border-left:3px solid #0f766e;" : "";
+
     return `
     <tr style="${rowBg}">
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;${fontWeight}">${escapeHtml(entry.billDate ? formatDate(entry.billDate) : (entry.invoiceDate ? formatDate(entry.invoiceDate) : "N/A"))}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#111827;${fontWeight}">${escapeHtml(entry.invoiceNumber || entry.reference || "N/A")}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;${fontWeight}">${escapeHtml(ageText)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;${fontWeight}">${escapeHtml(formatCurrency(entry.amount, entry.currency || currency))}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;white-space:nowrap;${fontWeight}${borderLeft}">${escapeHtml(entry.billDate ? formatDate(entry.billDate) : (entry.invoiceDate ? formatDate(entry.invoiceDate) : "N/A"))}</td>
+      <td class="table-cell wrap-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#0f172a;font-size:13px;word-break:break-word;${fontWeight}">${escapeHtml(entry.invoiceNumber || entry.reference || "N/A")}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:13px;white-space:nowrap;${fontWeight}">${escapeHtml(ageText)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#0f172a;font-size:13px;white-space:nowrap;${fontWeight}">${escapeHtml(formatCurrency(entry.amount, entry.currency || currency))}</td>
     </tr>
   `;
   });
@@ -396,8 +491,8 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const policies = database?.cashDiscountPolicies?.filter((p: any) => p.ownerId === due.ownerId) || [];
   const cdEvaluation = evaluateCashDiscountEligibility(due, filteredDues, policies, today, currentRuleDay);
 
-  // Box 1 Amount = amount of the current invoice/due record
-  const box2Amount = due?.amount || 0;
+  // Box 1 Amount = sum of all dues for this dealer in the current rule stage
+  const box2Amount = calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today);
 
   // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)
   const currentInvoiceAge = getBillAgeDays(due?.billDate || due?.invoiceDate || "", today) || 0;
@@ -416,18 +511,22 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
 
   // Box 1 Label
   let box2Label = "";
-  if (currentRuleDay <= 45) {
-    box2Label = cdEvaluation.eligible
-      ? `Payment Due in ${currentRuleDay} Days (for CD)`
-      : `Payment Due in ${currentRuleDay} Days`;
+  if (currentRuleDay === 30) {
+    const daysVal = calculateDynamicDays(currentInvoiceAge, 30);
+    box2Label = `Payment Due in ${daysVal} Days to Avail 3% CD`;
+  } else if (currentRuleDay === 45) {
+    const daysVal = calculateDynamicDays(currentInvoiceAge, 45);
+    box2Label = `Payment Due in ${daysVal} Days to Avail 2% CD`;
   } else {
-    box2Label = `Payment Due in ${currentRuleDay} Days`;
+    const daysVal = calculateDynamicDays(currentInvoiceAge, currentRuleDay);
+    box2Label = `Payment Due in ${daysVal} Days`;
   }
 
   const paragraphs = log.content
     .split(/\n{2,}/)
     .filter((paragraph) => !/^(Payment Summary|Outstanding Summary):/i.test(paragraph.trim()))
-    .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()));
+    .filter((paragraph) => !/^(Total|Previous|Current) outstanding:/i.test(paragraph.trim()))
+    .filter((paragraph) => !/^Final Reminder To Avail \d+% CD$/i.test(paragraph.trim()));
 
   const dearIdx = paragraphs.findIndex(p => p.trim().startsWith("Dear"));
   if (dearIdx !== -1 && currentRuleDay <= 60) {
@@ -437,9 +536,9 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const bodyHtml = paragraphs
     .map((paragraph) => {
       if (paragraph.startsWith("<strong>")) {
-        return `<p style="margin:-6px 0 14px;font-weight:bold;color:#0f766e;font-size:15px;">${paragraph.replace(/<\/?strong>/g, "")}</p>`;
+        return `<p style="margin:-4px 0 14px;font-weight:700;color:#0f766e;font-size:15px;line-height:1.5;">${paragraph.replace(/<\/?strong>/g, "")}</p>`;
       }
-      return `<p style="margin:0 0 14px;line-height:1.55;color:#374151;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`;
+      return `<p style="margin:0 0 14px;line-height:1.6;color:#334155;font-size:14px;word-break:break-word;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`;
     })
     .join("");
 
@@ -447,30 +546,27 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
   const ruleTemplate = database?.templates?.find((t: any) => (rule?.templateId ? t.id === rule.templateId : t.ruleId === log.ruleId));
 
   const show1 = (ruleTemplate?.pdfBox1Visible ?? rule?.pdfBox1Visible) !== false;
-  const show2 = (ruleTemplate?.pdfBox2Visible ?? rule?.pdfBox2Visible) !== false;
   const show3 = (ruleTemplate?.pdfBox3Visible ?? rule?.pdfBox3Visible) !== false;
 
   const label1 = (ruleTemplate?.pdfBox1Label || rule?.pdfBox1Label || "")?.trim() || box2Label;
-  const label2 = (ruleTemplate?.pdfBox2Label || rule?.pdfBox2Label || "")?.trim() || box3Label;
   const label3 = (ruleTemplate?.pdfBox3Label || rule?.pdfBox3Label || "")?.trim() || "Total Outstanding";
 
   type EmailBox = { label: string; amount: number; color: string };
   const visibleEmailBoxes: EmailBox[] = [
-    ...(show1 ? [{ label: label1, amount: box2Amount, color: "#111827" }] : []),
-    ...(show2 ? [{ label: label2, amount: box3Amount, color: "#b45309" }] : []),
+    ...(show1 ? [{ label: label1, amount: box2Amount, color: "#0f172a" }] : []),
     ...(show3 ? [{ label: label3, amount: calculatedTotalOutstanding, color: "#0f766e" }] : []),
   ];
 
   const cellWidth = visibleEmailBoxes.length > 0 ? (100 / visibleEmailBoxes.length).toFixed(2) : "100";
 
   const summaryBoxesHtml = visibleEmailBoxes.length === 0 ? "" : `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 18px;table-layout:fixed;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 18px;table-layout:fixed;width:100%;">
       <tr>
         ${visibleEmailBoxes.map((box) => `
-          <td style="width:${cellWidth}%;padding:0 4px;vertical-align:top;">
-            <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 10px;background:#fafafa;min-height:76px;box-sizing:border-box;">
-              <div style="font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;line-height:1.25;word-break:break-word;">${escapeHtml(box.label)}</div>
-              <div style="font-size:16px;font-weight:800;margin-top:6px;color:${box.color};">${escapeHtml(formatCurrency(box.amount, currency))}</div>
+          <td class="stack-col" style="width:${cellWidth}%;padding:4px;vertical-align:top;">
+            <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#f8fafc;box-sizing:border-box;">
+              <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.02em;line-height:1.3;word-break:break-word;">${escapeHtml(box.label)}</div>
+              <div class="metric-value" style="font-size:18px;font-weight:800;margin-top:6px;color:${box.color};letter-spacing:-.01em;">${escapeHtml(formatCurrency(box.amount, currency))}</div>
             </div>
           </td>
         `).join("")}
@@ -480,47 +576,141 @@ function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDuesForDeal
 
   return `
     <!doctype html>
-    <html>
-      <body style="margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-        <div style="max-width:720px;margin:0 auto;padding:28px 18px;">
-          <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-            <div style="padding:24px 26px;background:#0f766e;color:#ffffff;">
-              <div style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#ccfbf1;font-weight:700;">Payment Reminder</div>
-              <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#ffffff;">Invoice ${escapeHtml(log.invoiceNumber || due.invoiceNumber || due.reference || "N/A")}</h1>
-              <div style="margin-top:6px;font-size:14px;color:#d1fae5;">${escapeHtml(due.companyName || "Customer")}</div>
-            </div>
-            <div style="padding:22px 26px;">
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+        <title>Payment Reminder - Invoice ${escapeHtml(log.invoiceNumber || due.invoiceNumber || due.reference || "N/A")}</title>
+        <style>
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            background-color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          table {
+            border-collapse: collapse !important;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+          }
+          @media screen and (max-width: 640px) {
+            .email-outer-wrap {
+              padding: 10px 6px !important;
+            }
+            .email-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              border-radius: 6px !important;
+            }
+            .header-box {
+              padding: 18px 16px !important;
+            }
+            .content-box {
+              padding: 16px 14px !important;
+            }
+            .header-title {
+              font-size: 19px !important;
+              line-height: 1.25 !important;
+            }
+            .stack-col {
+              display: block !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              padding: 0 0 8px 0 !important;
+              box-sizing: border-box !important;
+            }
+            .metric-card-inner {
+              padding: 10px 12px !important;
+            }
+            .metric-value {
+              font-size: 17px !important;
+            }
+            .table-scroll-wrapper {
+              width: 100% !important;
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+              display: block !important;
+              margin-bottom: 14px !important;
+              border: 1px solid #e2e8f0 !important;
+              border-radius: 6px !important;
+            }
+            .data-table {
+              min-width: 320px !important;
+              width: 100% !important;
+            }
+            .table-cell {
+              padding: 8px 8px !important;
+              font-size: 11px !important;
+            }
+          }
+        </style>
+      </head>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#f1f5f9;">
+          <tr>
+            <td align="center" class="email-outer-wrap" style="padding:24px 12px;">
+              <div class="email-container" style="max-width:680px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);text-align:left;">
+                
+                <!-- Header Banner -->
+                <div class="header-box" style="padding:22px 24px;background:#0f766e;color:#ffffff;">
+                  <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#99f6e4;font-weight:700;">Payment Reminder</div>
+                  <h1 class="header-title" style="margin:6px 0 0;font-size:21px;line-height:1.25;color:#ffffff;font-weight:800;">Invoice ${escapeHtml(log.invoiceNumber || due.invoiceNumber || due.reference || "N/A")}</h1>
+                  <div style="margin-top:4px;font-size:14px;color:#ccfbf1;font-weight:500;">${escapeHtml(due.companyName || "Customer")}</div>
+                </div>
 
-              <!-- Outstanding Summary Boxes (Dynamic per rule configuration) -->
-              ${summaryBoxesHtml}
+                <!-- Main Content Area -->
+                <div class="content-box" style="padding:22px 24px;">
 
-              <div style="margin-bottom:20px;">
-                ${bodyHtml}
+                  <!-- Summary Metric Boxes -->
+                  ${summaryBoxesHtml}
+
+                  <!-- Message Body -->
+                  <div style="margin-bottom:18px;">
+                    ${bodyHtml}
+                  </div>
+
+                  <!-- Invoice Table -->
+                  <h2 style="font-size:16px;line-height:1.3;margin:22px 0 10px;color:#0f172a;font-weight:800;">Invoice Table</h2>
+                  <div class="table-scroll-wrapper" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:16px;">
+                    <table class="data-table" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#ffffff;">
+                      <thead>
+                        <tr style="background:#f8fafc;">
+                          <th align="left" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;">Invoice Date</th>
+                          <th align="left" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">Invoice Number</th>
+                          <th align="left" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;">Days Aged</th>
+                          <th align="right" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;">Outstanding</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${invoiceRows.join("") || `<tr><td colspan="4" class="table-cell" style="padding:14px;color:#64748b;font-size:13px;text-align:center;">No invoices found.</td></tr>`}
+                        <tr style="background:#f8fafc;font-weight:bold;border-top:2px solid #e2e8f0;">
+                          <td colspan="3" class="table-cell" style="padding:10px 12px;color:#0f172a;font-weight:800;font-size:13px;">Total Outstanding</td>
+                          <td class="table-cell" style="padding:10px 12px;text-align:right;color:#0f766e;font-weight:800;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style="font-size:12px;color:#94a3b8;line-height:1.4;margin-top:20px;text-align:center;">
+                    This is an automated payment reminder. If you have already made the payment, please disregard this notice.
+                  </div>
+
+                </div>
               </div>
-
-              <!-- Invoice Table: all invoices for this dealer code -->
-              <h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">Invoice Table</h2>
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-                <thead>
-                  <tr style="background:#f9fafb;">
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice Date</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Invoice Number</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Days Aged</th>
-                    <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;font-weight:800;">Outstanding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${invoiceRows.join("") || `<tr><td colspan="4" style="padding:14px;color:#6b7280;">No invoices found.</td></tr>`}
-                  <tr style="background:#f9fafb;font-weight:bold;border-top:2px solid #e5e7eb;">
-                    <td colspan="3" style="padding:11px 13px;color:#111827;font-weight:800;">Total Outstanding</td>
-                    <td style="padding:11px 13px;text-align:right;color:#0f766e;font-weight:800;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-            </div>
-          </div>
-        </div>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -565,12 +755,35 @@ export function evaluateCashDiscountEligibility(
 
   const hasOlderUnpaid = olderUnpaidBills.length > 0;
 
-  const eligiblePolicy = ruleTriggerDay
-    ? (policies.find((policy) => policy.enabled && policy.paymentWindowDays === ruleTriggerDay) || null)
-    : (policies
-        .filter((policy) => policy.enabled)
-        .sort((left, right) => left.paymentWindowDays - right.paymentWindowDays)
-        .find((policy) => billAgeDays <= policy.paymentWindowDays) || null);
+  // New logic: Grace-period ranges for CD eligibility
+  let eligiblePolicy: CashDiscountPolicy | null = null;
+  let discountPercent = 0;
+  let paymentWindowDays = 0;
+
+  if (billAgeDays >= 25 && billAgeDays <= 30) {
+    discountPercent = 3;
+    paymentWindowDays = 30;
+  } else if (billAgeDays >= 40 && billAgeDays <= 45) {
+    discountPercent = 2;
+    paymentWindowDays = 45;
+  }
+
+  if (discountPercent > 0) {
+    const policyFromDb = policies.find(
+      (p) => p.enabled && p.discountPercent === discountPercent
+    );
+    eligiblePolicy = policyFromDb || {
+      id: `temp-cd-${discountPercent}`,
+      ownerId: due.ownerId,
+      name: `${paymentWindowDays} Day CD`,
+      paymentWindowDays,
+      discountPercent,
+      enabled: true,
+      description: `Customer remains eligible for ${discountPercent}% cash discount when payment is cleared within ${paymentWindowDays} days.`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
 
   if (!eligiblePolicy) {
     return {
@@ -593,7 +806,6 @@ export function evaluateCashDiscountEligibility(
       ? `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because this is the first active bill on record.`
       : `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because no older unpaid invoices remain open.`;
   }
-
 
   return {
     eligible: true,
@@ -687,150 +899,387 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
 
     const rawSettings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
     const settings = resolveDispatchSettings(rawSettings ?? { ownerId: workspace.configOwnerId });
+    const thresholdAmount = settings.thresholdAmount ?? 10000;
 
+    // 1. Group invoices by dealer (using getDuePartyKey)
+    const invoicesByDealer = new Map<string, DueRecord[]>();
     for (const due of dues) {
-      const contact = findMatchingMasterContact(due, contacts);
+      if (!(due.amount > 0)) continue; // only open/unpaid invoices
+      const key = getDuePartyKey(due);
+      if (!invoicesByDealer.has(key)) {
+        invoicesByDealer.set(key, []);
+      }
+      invoicesByDealer.get(key)!.push(due);
+    }
+
+    // 2. Process each dealer
+    for (const [dealerKey, dealerInvoices] of invoicesByDealer.entries()) {
+      const representativeDue = dealerInvoices[0];
+      const contact = findMatchingMasterContact(representativeDue, contacts);
       if (!contact) {
         continue;
       }
 
-      const billAgeDays = getBillAgeDays(due.billDate || due.invoiceDate, today);
-      if (billAgeDays === null) {
+      // Calculate invoice age and sort from oldest to newest
+      const invoicesWithAge = dealerInvoices
+        .map((inv) => ({
+          inv,
+          age: getBillAgeDays(inv.billDate || inv.invoiceDate, today)
+        }))
+        .filter((item): item is { inv: DueRecord; age: number } => item.age !== null)
+        .sort((a, b) => b.age - a.age); // oldest first (descending age)
+
+      if (invoicesWithAge.length === 0) {
         continue;
       }
 
-      const allDuesForDealer = dues.filter(
-        (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
+      // Group invoices into the 6 non-overlapping ageing buckets:
+      const bucket1: DueRecord[] = []; // Age > 120
+      const bucket2: DueRecord[] = []; // Age > 90 and <= 120
+      const bucket3: DueRecord[] = []; // Age > 60 and <= 90
+      const bucket4: DueRecord[] = []; // Age > 50 and <= 60
+      const bucket5: DueRecord[] = []; // Age >= 40 and <= 45 (2% CD)
+      const bucket6: DueRecord[] = []; // Age >= 25 and <= 30 (3% CD)
+
+      for (const item of invoicesWithAge) {
+        const age = item.age;
+        if (age > 120) {
+          bucket1.push(item.inv);
+        } else if (age > 90 && age <= 120) {
+          bucket2.push(item.inv);
+        } else if (age > 60 && age <= 90) {
+          bucket3.push(item.inv);
+        } else if (age > 50 && age <= 60) {
+          bucket4.push(item.inv);
+        } else if (age >= 40 && age <= 45) {
+          bucket5.push(item.inv);
+        } else if (age >= 25 && age <= 30) {
+          bucket6.push(item.inv);
+        }
+      }
+
+      // Sum of pending amounts in each bucket
+      const sum1 = bucket1.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum2 = bucket2.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum3 = bucket3.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum4 = bucket4.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum5 = bucket5.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum6 = bucket6.reduce((sum, inv) => sum + inv.amount, 0);
+
+      // Accumulation logic: process from oldest (bucket 1) to newest (bucket 6)
+      let selectedStageNum = 0; // 0 means none
+      let accumulated = 0;
+      let relevantAmount = 0;
+      let selectedInvoices: DueRecord[] = [];
+
+      // Check Stage 1 (120+)
+      if (bucket1.length > 0) {
+        accumulated += sum1;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 1;
+          relevantAmount = sum1;
+          selectedInvoices = bucket1;
+        }
+      }
+
+      // Check Stage 2 (90–120)
+      if (selectedStageNum === 0 && bucket2.length > 0) {
+        accumulated += sum2;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 2;
+          relevantAmount = sum2;
+          selectedInvoices = bucket2;
+        }
+      }
+
+      // Check Stage 3 (60–90)
+      if (selectedStageNum === 0 && bucket3.length > 0) {
+        accumulated += sum3;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 3;
+          relevantAmount = sum3;
+          selectedInvoices = bucket3;
+        }
+      }
+
+      // Check Stage 4 (50–60)
+      if (selectedStageNum === 0 && bucket4.length > 0) {
+        accumulated += sum4;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 4;
+          relevantAmount = sum4;
+          selectedInvoices = bucket4;
+        }
+      }
+
+      // Check Stage 5 (2% CD)
+      if (selectedStageNum === 0 && bucket5.length > 0) {
+        accumulated += sum5;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 5;
+          relevantAmount = sum5;
+          selectedInvoices = bucket5;
+        }
+      }
+
+      // Check Stage 6 (3% CD)
+      if (selectedStageNum === 0 && bucket6.length > 0) {
+        accumulated += sum6;
+        if (accumulated >= thresholdAmount) {
+          selectedStageNum = 6;
+          relevantAmount = sum6;
+          selectedInvoices = bucket6;
+        }
+      }
+
+      // If no stage crossed the threshold, do not send any reminder
+      if (selectedStageNum === 0) {
+        continue;
+      }
+
+      // Map selectedStageNum to rule triggerDay
+      let targetTriggerDay = 0;
+      let stageLabel = "";
+      let reminderType = "";
+      if (selectedStageNum === 1) {
+        targetTriggerDay = 120;
+        stageLabel = "Age > 120";
+        reminderType = "120+ Overdue Reminder";
+      } else if (selectedStageNum === 2) {
+        targetTriggerDay = 90;
+        stageLabel = "Age 90-120";
+        reminderType = "90+ Overdue Reminder";
+      } else if (selectedStageNum === 3) {
+        targetTriggerDay = 75;
+        stageLabel = "Age 60-90";
+        reminderType = "60+ Overdue Reminder";
+      } else if (selectedStageNum === 4) {
+        targetTriggerDay = 60;
+        stageLabel = "Age 50-60";
+        reminderType = "50-60 Day Reminder";
+      } else if (selectedStageNum === 5) {
+        targetTriggerDay = 45;
+        stageLabel = "Age 40-45 (2% CD)";
+        reminderType = "2% Cash Discount";
+      } else if (selectedStageNum === 6) {
+        targetTriggerDay = 30;
+        stageLabel = "Age 25-30 (3% CD)";
+        reminderType = "3% Cash Discount";
+      }
+
+      // Find the enabled rule for this triggerDay
+      const rule = rules.find((r) => r.triggerDay === targetTriggerDay);
+      if (!rule) {
+        continue;
+      }
+
+      // Check dealer-level 5-day silence window cooldown:
+      const targetCode = (representativeDue.dealerCode || representativeDue.customerCode || "").trim().toLowerCase();
+      const targetName = (representativeDue.companyName || "").trim().toLowerCase();
+
+      const hasRecentSentReminder = database.reminderLogs.some((log) => {
+        if (log.status !== "sent") {
+          return false;
+        }
+        const logCode = (log.dealerCode || "").trim().toLowerCase();
+        const logName = (log.dealerName || "").trim().toLowerCase();
+        const matchesDealer = (targetCode && logCode && logCode === targetCode) || (targetName && logName && logName === targetName);
+        if (!matchesDealer) {
+          return false;
+        }
+        const logDateStr = log.sentAt || log.createdAt;
+        if (!logDateStr) return false;
+        const logDate = new Date(logDateStr);
+        if (Number.isNaN(logDate.getTime())) return false;
+        const days = daysBetween(logDate, today);
+        return days >= 0 && days < 5; // cooldown is active if less than 5 days have passed
+      });
+
+      if (hasRecentSentReminder) {
+        continue;
+      }
+
+      // Prevent duplicate sends if the scheduler runs more than once on the same day.
+      const alreadyScheduledToday = database.reminderLogs.some((log) => {
+        const logCode = (log.dealerCode || "").trim().toLowerCase();
+        const logName = (log.dealerName || "").trim().toLowerCase();
+        const matchesDealer = (targetCode && logCode && logCode === targetCode) || (targetName && logName && logName === targetName);
+        return matchesDealer && log.scheduledFor === scheduledFor;
+      });
+
+      if (alreadyScheduledToday) {
+        continue;
+      }
+
+      // Determine oldest invoice in the selected bucket for wording/age calculations
+      const sortedSelectedInvoices = [...selectedInvoices].sort((a, b) => {
+        const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
+        const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
+        return ageB - ageA; // oldest first
+      });
+      const oldestSelectedDue = sortedSelectedInvoices[0];
+      const oldestSelectedDueAge = getBillAgeDays(oldestSelectedDue.billDate || oldestSelectedDue.invoiceDate, today) || 0;
+
+      // Evaluate Cash Discount eligibility using the oldest invoice in the selected stage
+      const cdEvaluation = evaluateCashDiscountEligibility(
+        oldestSelectedDue,
+        dealerInvoices,
+        policies,
+        today,
+        rule.triggerDay
       );
-      const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
 
-      for (const rule of rules) {
-        // Fire EXACTLY 5 days BEFORE the rule's nominal day (e.g. 30-day rule fires when bill is exactly 25 days old)
-        if (billAgeDays !== (rule.triggerDay - 5)) {
+      const template = templates.find((entry) => entry.id === rule.templateId);
+      if (!template) {
+        continue;
+      }
+
+      // Calculate total outstanding of ALL unpaid invoices for the dealer
+      const totalOutstanding = dealerInvoices.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+
+      // Build custom payment summary for replacements
+      const customPaymentSummary = {
+        currentInvoiceDue: relevantAmount,
+        previousDue: totalOutstanding - relevantAmount,
+        totalDue: totalOutstanding,
+        previousDues: dealerInvoices.filter((entry) => !selectedInvoices.some((si) => si.id === entry.id))
+      };
+
+      // For dynamic calculation of days relative to the bucket milestones
+      const daysBeforeDueVal = calculateDynamicDays(oldestSelectedDueAge, rule.triggerDay);
+
+      // Build custom Replacements
+      const invoiceAmount = formatCurrency(relevantAmount, oldestSelectedDue.currency);
+      const currentInvoiceDueAmount = formatCurrency(relevantAmount, oldestSelectedDue.currency);
+      const previousDueAmount = formatCurrency(customPaymentSummary.previousDue, oldestSelectedDue.currency);
+      const totalDueAmount = formatCurrency(totalOutstanding, oldestSelectedDue.currency);
+      const invoiceNumber = selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", ");
+      const dueDate = oldestSelectedDue.dueDate ? formatDate(oldestSelectedDue.dueDate) : "Not available";
+
+      const replacements = {
+        amount: invoiceAmount,
+        billAgeDays: oldestSelectedDueAge,
+        billDate: formatDate(oldestSelectedDue.billDate || oldestSelectedDue.invoiceDate),
+        companyBillKey: getDuePartyKey(oldestSelectedDue),
+        cdAmount: buildCdAmount(cdEvaluation),
+        cdMessage: buildCdMessage(cdEvaluation),
+        companyName: oldestSelectedDue.companyName,
+        company_name: oldestSelectedDue.companyName,
+        contactName:
+          (contact.primaryContact && contact.primaryContact !== "Accounts Team")
+            ? contact.primaryContact
+            : (oldestSelectedDue.companyName || "Accounts Team"),
+        currentInvoiceDueAmount,
+        current_invoice_due_amount: currentInvoiceDueAmount,
+        daysBeforeDue: daysBeforeDueVal,
+        dealer_name: oldestSelectedDue.companyName,
+        dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode,
+        dueDate,
+        due_date: dueDate,
+        invoiceAmount,
+        invoice_amount: invoiceAmount,
+        invoiceNumber,
+        invoice_no: invoiceNumber,
+        openingAmount: formatCurrency(oldestSelectedDue.openingAmount, oldestSelectedDue.currency),
+        overdueDays: Math.max(0, oldestSelectedDueAge - 60),
+        previousDueAmount,
+        previous_due_amount: previousDueAmount,
+        pendingAmount: invoiceAmount,
+        reference: invoiceNumber,
+        reminderDay: rule.triggerDay,
+        senderCompany: user?.companyName || "ARB Bearings Limited",
+        totalDueAmount,
+        total_due_amount: totalDueAmount
+      };
+
+      let effectiveTemplate = template;
+      if (rule.triggerDay === 30 && oldestSelectedDueAge > 30) {
+        effectiveTemplate = {
+          ...template,
+          emailBody: buildEmailBody(35),
+          whatsappBody: buildWhatsappBody(35),
+          smsBody: buildWhatsappBody(35)
+        };
+      } else if (rule.triggerDay === 45 && oldestSelectedDueAge > 45) {
+        effectiveTemplate = {
+          ...template,
+          emailBody: buildEmailBody(50),
+          whatsappBody: buildWhatsappBody(50),
+          smsBody: buildWhatsappBody(50)
+        };
+      }
+
+      const channelEntries = buildChannelEntries(rule, effectiveTemplate, contact, oldestSelectedDue, undefined, settings);
+
+      for (const [channel, enabled, recipient, body] of channelEntries) {
+        if (!enabled || !recipient) {
           continue;
         }
 
-        const template = templates.find((entry) => entry.id === rule.templateId);
-        if (!template) {
+        const dedupeKey = buildReminderDedupeKey(oldestSelectedDue, rule, channel);
+
+        if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
           continue;
         }
 
-        const cdEvaluation = evaluateCashDiscountEligibility(
-          due,
-          allDuesForDealer,
-          policies,
-          today,
-          rule.triggerDay
+        let subject = channel === "email"
+          ? fillTemplate(template.emailSubject, replacements)
+          : `${rule.name} reminder`;
+        let content = composeReminderContent(
+          channel,
+          body,
+          replacements,
+          cdEvaluation,
+          customPaymentSummary,
+          oldestSelectedDue.currency
         );
 
-        const replacements = buildReplacements(
-          { due, contact, rule, template, cdEvaluation, billAgeDays, paymentSummary },
-          user?.companyName || "Your Company"
-        );
-        const channelEntries = buildChannelEntries(rule, template, contact, due, undefined, settings);
-
-        for (const [channel, enabled, recipient, body] of channelEntries) {
-          if (!enabled || !recipient) {
-            continue;
-          }
-
-          const dedupeKey = buildReminderDedupeKey(due, rule, channel);
-
-          if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
-            continue;
-          }
-
-          created.push({
-            id: randomUUID(),
-            ownerId: workspace.workspaceId,
-            dueId: due.id,
-            dedupeKey,
-            contactId: contact.id,
-            ruleId: rule.id,
-            templateId: template.id,
-            dealerCode: due.dealerCode || due.customerCode,
-            invoiceNumber: due.invoiceNumber || due.reference || "",
-            reminderDay: rule.triggerDay,
-            billAgeDays,
-            cdEligible: cdEvaluation.eligible,
-            cdPolicyId: cdEvaluation.policy?.id || "",
-            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? (rule.triggerDay === 30 ? 3 : rule.triggerDay === 45 ? 2 : 0),
-            cdReason: cdEvaluation.reason,
-            channel,
-            recipient,
-            scheduledFor,
-            status: "pending",
-            subject:
-              channel === "email"
-                ? fillTemplate(template.emailSubject, replacements)
-                : `${rule.name} reminder`,
-            content: composeReminderContent(
-              channel,
-              body,
-              replacements,
-              cdEvaluation,
-              paymentSummary,
-              due.currency
-            ),
-            failureReason: "",
-            sentAt: "",
-            createdAt: new Date().toISOString()
-          });
+        // Dynamically replace any mentions of "5 days" or "5 day" in subject or content for rules 30, 45, and 60
+        if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
+          const replacementText = `${daysBeforeDueVal} days`;
+          subject = subject.replace(/5\s+days?/gi, replacementText);
+          content = content.replace(/5\s+days?/gi, replacementText);
+          subject = subject.replace(/5-day/gi, `${daysBeforeDueVal}-day`).replace(/5\s+day/gi, `${daysBeforeDueVal} day`);
+          content = content.replace(/5-day/gi, `${daysBeforeDueVal}-day`).replace(/5\s+day/gi, `${daysBeforeDueVal} day`);
         }
+
+        created.push({
+          id: randomUUID(),
+          ownerId: workspace.workspaceId,
+          dueId: oldestSelectedDue.id,
+          dedupeKey,
+          contactId: contact.id,
+          ruleId: rule.id,
+          templateId: template.id,
+          dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode,
+          invoiceNumber: oldestSelectedDue.invoiceNumber || oldestSelectedDue.reference || "",
+          reminderDay: rule.triggerDay,
+          billAgeDays: oldestSelectedDueAge,
+          cdEligible: cdEvaluation.eligible,
+          cdPolicyId: cdEvaluation.policy?.id || "",
+          cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
+          cdReason: cdEvaluation.reason,
+          channel,
+          recipient,
+          scheduledFor,
+          status: "pending",
+          subject,
+          content,
+          failureReason: "",
+          sentAt: "",
+          createdAt: new Date().toISOString(),
+          dealerName: oldestSelectedDue.companyName,
+          reminderType,
+          selectedAgeingStage: stageLabel,
+          invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
+          relevantAmount,
+          totalOutstanding,
+          thresholdAmount
+        });
       }
     }
 
     database.reminderLogs.push(...created);
-    
-    /* Auto-send logic commented out so that generated reminders remain in 'pending' status for manual dispatch.
-    const autoSendRuleIds = Array.from(
-      new Set(created.map((entry) => entry.ruleId).filter((ruleId) => rules.find((rule) => rule.id === ruleId && rule.autoSend)))
-    );
-
-    if (autoSendRuleIds.length > 0) {
-      const settings = database.dispatchSettings.find(
-        (entry) => entry.ownerId === workspace.configOwnerId
-      );
-
-      if (!settings) {
-        throw new Error("Dispatch settings are missing.");
-      }
-
-      const resolvedSettings = resolveDispatchSettings(settings);
-      const autoSendLogs = created.filter((entry) => autoSendRuleIds.includes(entry.ruleId));
-
-      for (const log of autoSendLogs) {
-        try {
-          const due = database.dueRecords.find((entry) => entry.id === log.dueId);
-          const allDuesForDealer = due
-            ? filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds).filter(
-                (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
-              )
-            : [];
-          const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database);
-          log.status = status;
-          log.sentAt = new Date().toISOString();
-          log.failureReason = "";
-          if (due) {
-            due.lastReminderDate = log.sentAt;
-            due.reminderCount = (due.reminderCount || 0) + 1;
-            due.lastDispatchStatus = status;
-            due.updatedBy = user.id;
-          }
-        } catch (error) {
-          log.status = "failed";
-          log.failureReason =
-            error instanceof Error ? error.message : "Unknown sending error occurred.";
-          const due = database.dueRecords.find((entry) => entry.id === log.dueId);
-          if (due) {
-            due.lastDispatchStatus = "failed";
-            due.updatedBy = user.id;
-          }
-        }
-      }
-    }
-    */
-
     return created;
   });
 }
@@ -888,7 +1337,14 @@ export async function createManualRemindersForDue(
     const allDuesForDealer = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds).filter(
       (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
     );
-    const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
+    const rawPaymentSummary = buildPaymentSummary(due, allDuesForDealer);
+    const ruleOutstanding = calculateRuleOutstanding(allDuesForDealer, rule.triggerDay, new Date());
+    const paymentSummary = {
+      currentInvoiceDue: ruleOutstanding,
+      previousDue: rawPaymentSummary.totalDue - ruleOutstanding,
+      totalDue: rawPaymentSummary.totalDue,
+      previousDues: rawPaymentSummary.previousDues
+    };
     const cdEvaluation = evaluateCashDiscountEligibility(
       due,
       allDuesForDealer,
@@ -904,11 +1360,49 @@ export async function createManualRemindersForDue(
     const created: ReminderLog[] = [];
     const rawSettings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
     const settings = resolveDispatchSettings(rawSettings ?? { ownerId: workspace.configOwnerId });
-    const channelEntries = buildChannelEntries(rule, template, contact, due, channelSelection, settings);
+    let effectiveTemplate = template;
+    if (rule.triggerDay === 30 && billAgeDays > 30) {
+      effectiveTemplate = {
+        ...template,
+        emailBody: buildEmailBody(35),
+        whatsappBody: buildWhatsappBody(35),
+        smsBody: buildWhatsappBody(35)
+      };
+    } else if (rule.triggerDay === 45 && billAgeDays > 45) {
+      effectiveTemplate = {
+        ...template,
+        emailBody: buildEmailBody(50),
+        whatsappBody: buildWhatsappBody(50),
+        smsBody: buildWhatsappBody(50)
+      };
+    }
+
+    const channelEntries = buildChannelEntries(rule, effectiveTemplate, contact, due, channelSelection, settings);
 
     for (const [channel, enabled, recipient, body] of channelEntries) {
       if (!enabled || !recipient) {
         continue;
+      }
+
+      let subject = channel === "email"
+        ? fillTemplate(template.emailSubject, replacements)
+        : `${rule.name} reminder`;
+      let content = composeReminderContent(
+        channel,
+        body,
+        replacements,
+        cdEvaluation,
+        paymentSummary,
+        due.currency
+      );
+
+      if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
+        const daysVal = calculateDynamicDays(billAgeDays, rule.triggerDay);
+        const replacementText = `${daysVal} days`;
+        subject = subject.replace(/5\s+days?/gi, replacementText);
+        content = content.replace(/5\s+days?/gi, replacementText);
+        subject = subject.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
+        content = content.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
       }
 
       created.push({
@@ -931,21 +1425,18 @@ export async function createManualRemindersForDue(
         recipient,
         scheduledFor,
         status: "pending",
-        subject:
-          channel === "email"
-            ? fillTemplate(template.emailSubject, replacements)
-            : `${rule.name} reminder`,
-        content: composeReminderContent(
-          channel,
-          body,
-          replacements,
-          cdEvaluation,
-          paymentSummary,
-          due.currency
-        ),
+        subject,
+        content,
         failureReason: "",
         sentAt: "",
-        createdAt: scheduledFor
+        createdAt: scheduledFor,
+        dealerName: due.companyName,
+        reminderType: rule.name,
+        selectedAgeingStage: `Manual Trigger (nominal: ${rule.triggerDay} days)`,
+        invoiceIdsInvolved: [due.id],
+        relevantAmount: ruleOutstanding,
+        totalOutstanding: paymentSummary.totalDue,
+        thresholdAmount: settings.thresholdAmount ?? 10000
       });
     }
 
@@ -1135,7 +1626,9 @@ export async function getEmailContentForLog(
     ownerId: log.ownerId,
     dealerCode: log.dealerCode,
     companyName: due.companyName,
-    primaryContact: due.matchedContactName || "Accounts Team",
+    primaryContact: (due.matchedContactName && due.matchedContactName !== "Accounts Team")
+      ? due.matchedContactName
+      : (due.companyName || "Accounts Team"),
     email: log.recipient,
     whatsapp: log.recipient,
     sms: log.recipient,
@@ -1170,7 +1663,22 @@ export async function getEmailContentForLog(
     senderCompany
   );
 
-  return fillTemplate(template.emailBody, replacements);
+  let emailBody = template.emailBody;
+  if (rule.triggerDay === 30 && (log.billAgeDays || 0) > 30) {
+    emailBody = buildEmailBody(35);
+  } else if (rule.triggerDay === 45 && (log.billAgeDays || 0) > 45) {
+    emailBody = buildEmailBody(50);
+  }
+
+  let filled = fillTemplate(emailBody, replacements);
+  if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
+    const daysVal = calculateDynamicDays(log.billAgeDays || 0, rule.triggerDay);
+    const replacementText = `${daysVal} days`;
+    filled = filled.replace(/5\s+days?/gi, replacementText);
+    filled = filled.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
+  }
+
+  return filled;
 }
 
 async function sendInteraktWhatsapp(
@@ -1192,7 +1700,7 @@ async function sendInteraktWhatsapp(
   });
   const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
   const currency = due.currency || "INR";
-  const customerName = due.matchedContactName || due.companyName || "Customer";
+  const customerName = due.companyName || due.matchedContactName || "Customer";
   const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
   // 2. Fetch the corresponding email template content so the PDF has the exact email message body
@@ -1229,7 +1737,9 @@ async function sendInteraktWhatsapp(
   }
 
   // 4. Send WhatsApp with the PDF document
-  const contactName = due.matchedContactName || due.companyName || "Customer";
+  const contactName = (due.matchedContactName && due.matchedContactName !== "Accounts Team")
+    ? due.matchedContactName
+    : (due.companyName || "Customer");
   const invoiceNumber = due.invoiceNumber || due.reference || "";
   const formattedAmount = (due.amount || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -1271,7 +1781,7 @@ async function deliverReminder(
       });
       const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
       const currency = due.currency || "INR";
-      const customerName = due.matchedContactName || due.companyName || "Customer";
+      const customerName = due.companyName || due.matchedContactName || "Customer";
       const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
       let pdfMessageBody = log.content;
