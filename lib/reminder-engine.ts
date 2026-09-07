@@ -27,7 +27,10 @@ import {
   getDuePartyKey,
   getBillAgeDays,
   normalizeText,
-  daysBetween
+  daysBetween,
+  parseEmailList,
+  isValidEmailList,
+  formatEmailList
 } from "@/lib/utils";
 import { sendPaymentReminder } from "@/services/interaktService";
 import { generateOutstandingPDF } from "./pdf-generator";
@@ -264,7 +267,7 @@ function buildChannelEntries(
     [
       "email",
       emailGloballyEnabled && (channelSelection?.email ?? rule.channels.email),
-      contact.email || due.matchedEmail,
+      formatEmailList(contact.email || due.matchedEmail),
       template.emailBody
     ],
     [
@@ -313,7 +316,7 @@ function normalizePhoneNumber(value: string) {
 }
 
 function isValidEmailAddress(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  return isValidEmailList(value);
 }
 
 function templateIncludesCdToken(template: string) {
@@ -1498,9 +1501,12 @@ async function sendEmail(
     }
   ] : undefined;
 
+  const recipients = parseEmailList(log.recipient);
+  const to = recipients.length > 0 ? recipients : log.recipient;
+
   await transporter.sendMail({
     from: settings.senderEmail || settings.smtpFrom,
-    to: log.recipient,
+    to,
     subject: log.subject,
     text: log.content,
     html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content),

@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import * as XLSX from "xlsx";
 import { buildDueContactMatch } from "@/lib/contact-matching";
+import { formatEmailList } from "@/lib/utils";
 import type { DueRecord, MasterContact, Salesperson } from "@/lib/types";
 
 type RawRow = Record<string, string | number | boolean | Date | undefined>;
@@ -1063,7 +1064,7 @@ export function mapMasterRows(rows: RawRow[], ownerId: string) {
         customerCode: dealerCode,
         companyName: toText(pickValue(row, masterFieldCandidates.companyName)),
         primaryContact: toText(pickValue(row, masterFieldCandidates.primaryContact)),
-        email: toText(pickValue(row, masterFieldCandidates.email)),
+        email: formatEmailList(toText(pickValue(row, masterFieldCandidates.email))),
         whatsapp: toText(pickValue(row, masterFieldCandidates.whatsapp)),
         sms: toText(pickValue(row, masterFieldCandidates.sms)),
         alternateContact: toText(pickValue(row, masterFieldCandidates.alternateContact)),
