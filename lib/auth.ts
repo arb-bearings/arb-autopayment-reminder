@@ -8,7 +8,10 @@ import type { AuthEvent, User, UserRole } from "@/lib/types";
 
 const sessionCookieName = "apr_session";
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 14;
-const superAdminAccessEmail = "superadmin@example.com";
+const superAdminAccessEmails = [
+  "superadmin@example.com",
+  "arbbearings.marketing@gmail.com"
+];
 
 type SessionMetadata = {
   ipAddress?: string;
@@ -35,7 +38,15 @@ export function verifyPassword(password: string, storedHash: string) {
 }
 
 export function isSuperAdminAccessEmail(email: string) {
-  return email.trim().toLowerCase() === superAdminAccessEmail;
+  const normalized = email.trim().toLowerCase();
+  const envSuperAdmin = process.env.SUPERADMIN_EMAIL?.trim().toLowerCase();
+  if (envSuperAdmin) {
+    const list = envSuperAdmin.split(",").map((item) => item.trim());
+    if (list.includes(normalized)) {
+      return true;
+    }
+  }
+  return superAdminAccessEmails.includes(normalized);
 }
 
 function getSessionTokenSuffix(token: string) {
