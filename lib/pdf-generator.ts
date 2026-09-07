@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import { formatCurrency, formatDate, getBillAgeDays } from "@/lib/utils";
 import type { DueRecord } from "@/lib/types";
-import { evaluateCashDiscountEligibility } from "./reminder-engine";
+import { evaluateCashDiscountEligibility, calculateDynamicDays, calculateRuleOutstanding } from "./reminder-engine";
 import { getCompanyWorkspaceId } from "./company-workspace";
 
 // Helper to format currency for PDFKit standard fonts (which do not support the Unicode Rupee symbol "₹")
@@ -127,7 +127,8 @@ export function generateOutstandingPDF(
           console.error("Failed to evaluate CD eligibility in PDF generator:", e);
         }
       }
-       const box2Amount = matchedDue?.amount || 0;
+       // Box 1 Amount = sum of all dues for this dealer in the current rule stage
+       const box2Amount = calculateRuleOutstanding(dues, currentRuleDay, today);
        const currentInvoiceAge = getBillAgeDays(matchedDue?.billDate || matchedDue?.invoiceDate || "", today) || 0;
 
       // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)
@@ -146,12 +147,15 @@ export function generateOutstandingPDF(
 
       // Box 1 Label
       let box2Label = "";
-      if (currentRuleDay <= 45) {
-        box2Label = isCdEligible
-          ? `PAYMENT DUE IN ${currentRuleDay} DAYS (FOR CD)`
-          : `PAYMENT DUE IN ${currentRuleDay} DAYS`;
+      if (currentRuleDay === 30) {
+        const daysVal = calculateDynamicDays(currentInvoiceAge, 30);
+        box2Label = `PAYMENT DUE IN ${daysVal} DAYS TO AVAIL 3% CD`;
+      } else if (currentRuleDay === 45) {
+        const daysVal = calculateDynamicDays(currentInvoiceAge, 45);
+        box2Label = `PAYMENT DUE IN ${daysVal} DAYS TO AVAIL 2% CD`;
       } else {
-        box2Label = `PAYMENT DUE IN ${currentRuleDay} DAYS`;
+        const daysVal = calculateDynamicDays(currentInvoiceAge, currentRuleDay);
+        box2Label = `PAYMENT DUE IN ${daysVal} DAYS`;
       }
 
       const boxWidth = 155;
@@ -163,18 +167,15 @@ export function generateOutstandingPDF(
       const ruleTemplate = database?.templates?.find((t: any) => (rule?.templateId ? t.id === rule.templateId : t.ruleId === ruleId));
 
       const show1 = (ruleTemplate?.pdfBox1Visible ?? rule?.pdfBox1Visible) !== false;  // default: show
-      const show2 = (ruleTemplate?.pdfBox2Visible ?? rule?.pdfBox2Visible) !== false;
       const show3 = (ruleTemplate?.pdfBox3Visible ?? rule?.pdfBox3Visible) !== false;
 
       const label1 = (ruleTemplate?.pdfBox1Label || rule?.pdfBox1Label || "")?.trim() || box2Label;
-      const label2 = (ruleTemplate?.pdfBox2Label || rule?.pdfBox2Label || "")?.trim() || box3Label;
       const label3 = (ruleTemplate?.pdfBox3Label || rule?.pdfBox3Label || "")?.trim() || "TOTAL OUTSTANDING";
 
       // ── Build array of only the visible boxes ───────────────────────────────
       type BoxConfig = { label: string; amount: number; color: string };
       const visibleBoxes: BoxConfig[] = [
         ...(show1 ? [{ label: label1, amount: box2Amount,                    color: textColor   }] : []),
-        ...(show2 ? [{ label: label2, amount: box3Amount,                    color: "#b45309"   }] : []),
         ...(show3 ? [{ label: label3, amount: calculatedTotalOutstanding,    color: "#0f766e"   }] : []),
       ];
 
@@ -296,21 +297,18 @@ export function generateOutstandingPDF(
       dues.forEach((due, index) => {
         const isCurrent = currentDueId ? due.id === currentDueId : index === 0;
 
-        // Alternating row background; highlight the current invoice row
-        if (isCurrent) {
-          doc.rect(50, currentY, 495, 20)
-             .fillColor(highlightBg)
-             .fill();
-        } else if (index % 2 === 1) {
-          doc.rect(50, currentY, 495, 20)
-             .fillColor("#f8fafc")
-             .fill();
-        }
-
         const invoiceText = due.invoiceNumber || due.reference || "-";
         const today = new Date();
         const billAge = getBillAgeDays(due.billDate || due.invoiceDate, today);
         const ageText = billAge !== null ? `${billAge} days` : "N/A";
+
+        // Color code background based on overdue status (red if age > 60, green otherwise)
+        const isOverdue = (billAge || 0) > 60;
+        const rowBg = isOverdue ? "#fef2f2" : "#f0fdf4"; // Light red / light green
+
+        doc.rect(50, currentY, 495, 20)
+           .fillColor(rowBg)
+           .fill();
 
         doc.fillColor(textColor)
            .font(isCurrent ? "Helvetica-Bold" : "Helvetica")

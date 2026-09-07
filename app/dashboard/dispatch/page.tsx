@@ -12,6 +12,8 @@ import { resolveDispatchSettings } from "@/lib/dispatch-settings";
 import { readDatabase } from "@/lib/storage";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
+import { ReminderQueueTableDispatch } from "@/components/reminder-queue-table-dispatch";
+
 
 export default async function DispatchPage({
   searchParams
@@ -144,11 +146,15 @@ export default async function DispatchPage({
                 </ProtectedSubmitButton>
               </form>
 
-              <form action="/api/reminders/send" method="post" className="dispatch-form">
-                <ProtectedSubmitButton className="button button-secondary" promptOnSubmitOnly={true}>
+              <div className="dispatch-form">
+                <ProtectedSubmitButton
+                  form="send-queue-form"
+                  className="button button-secondary"
+                  promptOnSubmitOnly={true}
+                >
                   Send generated reminders
                 </ProtectedSubmitButton>
-              </form>
+              </div>
             </div>
           </article>
         </section>
@@ -241,76 +247,15 @@ export default async function DispatchPage({
             <p>Showing all reminder logs across all channels.</p>
           </div>
 
-          <div className="table-wrap dispatch-table-wrap">
-            <table className="dispatch-table">
-              <thead>
-                <tr>
-                  <th>No.</th>
-                  <th>Invoice</th>
-                  <th>Company</th>
-                  <th>Rule</th>
-                  <th>Channel</th>
-                  <th>Recipient</th>
-                  <th>Status</th>
-                  <th>Scheduled</th>
-                  <th>CD</th>
-                  <th>Failure / CD note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reminderLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={10}>Upload a dues file to populate the queue.</td>
-                  </tr>
-                ) : (
-                  reminderLogs.map((log, index) => {
-                    const due = dueRecordMap.get(log.dueId);
-                    const rule = ruleMap.get(log.ruleId);
-
-                    return (
-                      <tr key={log.id}>
-                        <td>{index + 1}</td>
-                        <td>{due?.invoiceNumber || due?.reference || due?.companyName || "N/A"}</td>
-                        <td>
-                          <div className="dispatch-company-cell">
-                            <span>{due?.companyName || log.dealerCode || "N/A"}</span>
-                            <span
-                              className={`dispatch-badge ${
-                                log.cdEligible
-                                  ? "dispatch-badge-cd"
-                                  : "dispatch-badge-cd dispatch-badge-cd-muted"
-                              }`}
-                            >
-                              {log.cdEligible
-                                ? `CD ${log.cdDiscountPercent}%`
-                                : "No CD"}
-                            </span>
-                          </div>
-                        </td>
-                        <td>{rule?.name || "Unknown rule"}</td>
-                        <td>
-                          <ChannelLabel channel={log.channel} />
-                        </td>
-                        <td>{isAdmin ? log.recipient : "Hidden"}</td>
-                        <td>
-                          <span className={`dispatch-badge dispatch-status-${log.status}`}>
-                            {log.status}
-                          </span>
-                        </td>
-                        <td>{formatDate(log.scheduledFor)}</td>
-                        <td>
-                          {log.cdEligible
-                            ? `${log.cdDiscountPercent}% eligible`
-                            : "Not eligible"}
-                        </td>
-                        <td>{log.failureReason || log.cdReason || "-"}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <form id="send-queue-form" action="/api/reminders/send" method="post">
+            <input type="hidden" name="isQueueSend" value="true" />
+            <ReminderQueueTableDispatch
+              reminderLogs={reminderLogs}
+              dueRecords={dueRecords}
+              rules={rules}
+              isAdmin={isAdmin}
+            />
+          </form>
         </article>
       </section>
     </DashboardShell>

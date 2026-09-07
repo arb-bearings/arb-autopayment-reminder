@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const totalAmount = allDuesForDealer.reduce((sum, item) => sum + (item.amount || 0), 0);
     const currency = due.currency || "INR";
-    const customerName = due.matchedContactName || due.companyName || log.dealerCode || "Customer";
+    const customerName = due.companyName || due.matchedContactName || log.dealerCode || "Customer";
     const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
 
     // Generate the exact reminder notice text for the PDF

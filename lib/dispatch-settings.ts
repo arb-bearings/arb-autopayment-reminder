@@ -59,6 +59,7 @@ export function resolveDispatchSettings(
     emailEnabled: settings?.emailEnabled ?? true,
     whatsappEnabled: settings?.whatsappEnabled ?? true,
     smsEnabled: settings?.smsEnabled ?? false,
-    updatedAt: settings?.updatedAt || new Date().toISOString()
+    updatedAt: settings?.updatedAt || new Date().toISOString(),
+    thresholdAmount: settings?.thresholdAmount !== undefined && Number.isFinite(Number(settings.thresholdAmount)) ? Number(settings.thresholdAmount) : 10000
   };
 }

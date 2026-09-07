@@ -12,6 +12,8 @@ import { isAdminUser, requireUser } from "@/lib/auth";
 import { readDatabase } from "@/lib/storage";
 import { ensureStoredDueWorkbook } from "@/lib/workbook-sync";
 import { formatCurrency, formatDate, formatElapsedDaysTag } from "@/lib/utils";
+import { ReminderQueueTableDues } from "@/components/reminder-queue-table-dues";
+
 
 export default async function DuesPage({
   searchParams
@@ -156,15 +158,16 @@ export default async function DuesPage({
                 </ProtectedSubmitButton>
               </form>
 
-              <form action="/api/reminders/send" method="post" className="dispatch-form">
+              <div className="dispatch-form">
                 <ProtectedSubmitButton
+                  form="send-queue-form"
                   className="button"
                   confirmationMessage="Send every pending reminder currently in the queue?"
                   promptOnSubmitOnly={true}
                 >
                   Send generated queue
                 </ProtectedSubmitButton>
-              </form>
+              </div>
             </div>
           )}
         </article>
@@ -257,48 +260,15 @@ export default async function DuesPage({
           ) : null}
 
           <TableSearch label="Search reminder queue" />
-          <div className="table-wrap">
-            <table data-searchable-table>
-              <thead>
-                <tr>
-                  <th>No.</th>
-                  <th>Invoice</th>
-                  <th>Dealer</th>
-                  <th>Channel</th>
-                  <th>Recipient</th>
-                  <th>Status</th>
-                  <th>Scheduled</th>
-                  <th>Failure</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reminderLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      {statusFilter || channelFilter
-                        ? "No reminder records match this filter."
-                        : "No reminders have been generated yet."}
-                    </td>
-                  </tr>
-                ) : (
-                  reminderLogs.slice(0, 100).map((log, index) => (
-                    <tr key={log.id}>
-                      <td>{index + 1}</td>
-                      <td>{log.invoiceNumber || "N/A"}</td>
-                      <td>{log.dealerCode || "N/A"}</td>
-                      <td>
-                        <ChannelLabel channel={log.channel} />
-                      </td>
-                      <td>{isAdmin ? log.recipient || "N/A" : "Hidden"}</td>
-                      <td className="capitalize">{log.status}</td>
-                      <td>{formatDate(log.scheduledFor)}</td>
-                      <td>{log.failureReason || "-"}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <form id="send-queue-form" action="/api/reminders/send" method="post">
+            <input type="hidden" name="isQueueSend" value="true" />
+            <ReminderQueueTableDues
+              reminderLogs={reminderLogs}
+              isAdmin={isAdmin}
+              statusFilter={statusFilter}
+              channelFilter={channelFilter}
+            />
+          </form>
         </article>
 
         <article className="glass-panel rule-span">

@@ -60,7 +60,10 @@ export function DashboardClientShell({
         }>)
       : []),
     ...(canUseDues
-      ? ([{ href: "/dashboard/dues", label: "Dues & Dispatch" }] satisfies Array<{
+      ? ([
+          { href: "/dashboard/dues", label: "Dues & Dispatch" },
+          { href: "/dashboard/reminder-logs" as unknown as Route, label: "Reminder Logs" }
+        ] satisfies Array<{
           href: Route;
           label: string;
         }>)

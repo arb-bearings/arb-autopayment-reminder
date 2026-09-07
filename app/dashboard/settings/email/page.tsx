@@ -102,6 +102,10 @@ export default async function EmailConfigurationPage({
             </div>
           </div>
           <label className="field">
+            <span>Payment Reminder Threshold Amount</span>
+            <input name="thresholdAmount" type="number" min="0" step="any" defaultValue={settings.thresholdAmount ?? 10000} required />
+          </label>
+          <label className="field">
             <span>Report frequency</span>
             <select name="reportFrequency" defaultValue={settings.reportFrequency}>
               <option value="daily">Daily</option>

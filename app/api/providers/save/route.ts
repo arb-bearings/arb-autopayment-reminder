@@ -23,8 +23,20 @@ export async function POST(request: Request) {
       formData.get("reportFrequency") === "manual"
         ? (formData.get("reportFrequency") as DispatchSettings["reportFrequency"])
         : "daily";
+
+    const thresholdAmountInput = formData.get("thresholdAmount");
+    let thresholdAmount = 10000;
+    if (thresholdAmountInput !== null && thresholdAmountInput !== undefined) {
+      const parsed = Number(thresholdAmountInput);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        throw new Error("Threshold amount must be a non-negative number.");
+      }
+      thresholdAmount = parsed;
+    }
+
     const nextValues: DispatchSettings = {
       ownerId: workspace.configOwnerId,
+      thresholdAmount,
       smtpHost: String(formData.get("smtpHost") || "").trim(),
       smtpPort: Number(formData.get("smtpPort") || 587),
       smtpSecure: formData.get("smtpSecure") === "on",

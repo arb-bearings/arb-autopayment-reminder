@@ -94,17 +94,17 @@ async function sendReportEmail(
 
 function buildMetricCard(label: string, value: string | number, accent = "#0f766e") {
   return `
-    <td style="width:25%;padding:8px;vertical-align:top;">
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa;">
-        <div style="font-size:12px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${escapeHtml(label)}</div>
-        <div style="font-size:22px;font-weight:800;margin-top:6px;color:${accent};">${escapeHtml(value)}</div>
+    <td class="metric-td" style="width:25%;padding:4px;vertical-align:top;">
+      <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+        <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${escapeHtml(label)}</div>
+        <div class="metric-value" style="font-size:20px;font-weight:800;margin-top:6px;color:${accent};">${escapeHtml(value)}</div>
       </div>
     </td>
   `;
 }
 
 function buildSectionTitle(title: string) {
-  return `<h2 style="font-size:18px;line-height:1.3;margin:24px 0 10px;color:#111827;font-weight:800;">${escapeHtml(title)}</h2>`;
+  return `<h2 class="section-title" style="font-size:17px;line-height:1.3;margin:22px 0 10px;color:#0f172a;font-weight:800;">${escapeHtml(title)}</h2>`;
 }
 
 function getOverdueDays(due: DueRecord, reportDate: Date) {
@@ -115,7 +115,7 @@ function getOverdueDays(due: DueRecord, reportDate: Date) {
   return Math.max(0, age - 60);
 }
 
-function buildDailyActivityReportHtml(input: {
+export function buildDailyActivityReportHtml(input: {
   day: string;
   dues: DueRecord[];
   todayLogs: ReminderLog[];
@@ -173,12 +173,15 @@ function buildDailyActivityReportHtml(input: {
     );
     const remindersSentToday = sentTodayLogs.length;
 
-    const matchingDueIds = sentTodayLogs.map(log => log.dueId).filter(Boolean);
-    const bucketDues = dues.filter(due => matchingDueIds.includes(due.id));
-    const amount = bucketDues.reduce((sum, entry) => sum + entry.amount, 0);
-
     const ruleDealerCodes = Array.from(new Set(sentTodayLogs.map(log => log.dealerCode).filter(Boolean)));
     const dealerCount = ruleDealerCodes.length;
+
+    // Sum of ALL open dues for these dealers (accounting for entire dealer outstanding, not just single invoices)
+    const dealersAllDues = dues.filter(due =>
+      ruleDealerCodes.includes(due.dealerCode || due.customerCode) ||
+      ruleDealerCodes.includes(due.companyName)
+    );
+    const amount = dealersAllDues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
     return { amount, dealerCount, remindersSentToday };
   };
@@ -190,22 +193,22 @@ function buildDailyActivityReportHtml(input: {
     }
     return `
       <tr>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">${escapeHtml(b.dealerLabel)}</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(info.dealerCount)}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;word-break:break-word;">${escapeHtml(b.dealerLabel)}</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(info.dealerCount)}</div>
           </div>
         </td>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL OUTSTANDING</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(formatCurrency(info.amount, currency))}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(formatCurrency(info.amount, currency))}</div>
           </div>
         </td>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">REMINDERS SENT TODAY</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(info.remindersSentToday)}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(info.remindersSentToday)}</div>
           </div>
         </td>
       </tr>
@@ -214,21 +217,21 @@ function buildDailyActivityReportHtml(input: {
 
   const topOutstandingRows = topOutstanding.map((entry, index) => `
     <tr>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">${escapeHtml(index + 1)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;">${escapeHtml(entry.dealer)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.invoiceCount)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#111827;">${escapeHtml(formatCurrency(entry.amount, currency))}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700;font-size:13px;">${escapeHtml(index + 1)}</td>
+      <td class="table-cell wrap-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a;font-size:13px;word-break:break-word;">${escapeHtml(entry.dealer)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;">${escapeHtml(entry.invoiceCount)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0f172a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(entry.amount, currency))}</td>
     </tr>
   `).join("");
 
   const topOverdueRows = topOverdue.map((entry, index) => `
     <tr>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">${escapeHtml(index + 1)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;">${escapeHtml(entry.dealer)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.invoiceCount)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#991b1b;font-weight:700;">${escapeHtml(`${entry.maxOverdueDays} days`)}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(entry.oldestDueDate ? formatDate(entry.oldestDueDate) : "Not available")}</td>
-      <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#111827;">${escapeHtml(formatCurrency(entry.amount, currency))}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700;font-size:13px;">${escapeHtml(index + 1)}</td>
+      <td class="table-cell wrap-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a;font-size:13px;word-break:break-word;">${escapeHtml(entry.dealer)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;">${escapeHtml(entry.invoiceCount)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#b91c1c;font-weight:700;font-size:13px;white-space:nowrap;">${escapeHtml(`${entry.maxOverdueDays} days`)}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;white-space:nowrap;">${escapeHtml(entry.oldestDueDate ? formatDate(entry.oldestDueDate) : "Not available")}</td>
+      <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0f172a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(entry.amount, currency))}</td>
     </tr>
   `).join("");
 
@@ -236,107 +239,180 @@ function buildDailyActivityReportHtml(input: {
     const amount = records.reduce((sum, entry) => sum + entry.amount, 0);
     return `
       <tr>
-        <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#111827;">${escapeHtml(salesperson)}</td>
-        <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;color:#374151;">${escapeHtml(records.length)}</td>
-        <td style="padding:11px 13px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#111827;">${escapeHtml(formatCurrency(amount, records[0]?.currency || currency))}</td>
+        <td class="table-cell wrap-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a;font-size:13px;word-break:break-word;">${escapeHtml(salesperson)}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;">${escapeHtml(records.length)}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0f172a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(amount, records[0]?.currency || currency))}</td>
       </tr>
     `;
   }).join("");
 
-  const table = (headers: string[], rows: string, emptyText = "No records found.") => `
-    <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-      <thead>
-        <tr style="background:#f9fafb;">
-          ${headers.map((header, index) => `
-            <th align="${index === headers.length - 1 ? "right" : "left"}" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">${escapeHtml(header)}</th>
-          `).join("")}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows || `<tr><td colspan="${headers.length}" style="padding:14px;color:#6b7280;">${escapeHtml(emptyText)}</td></tr>`}
-      </tbody>
-    </table>
+  const table = (headers: string[], rows: string, emptyText = "No records found.", minWidth = "360px") => `
+    <div class="table-scroll-wrapper" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:22px;background:#ffffff;">
+      <table class="data-table" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;min-width:${minWidth};">
+        <thead>
+          <tr style="background:#f8fafc;">
+            ${headers.map((header, index) => `
+              <th align="${index === headers.length - 1 ? "right" : "left"}" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;">${escapeHtml(header)}</th>
+            `).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || `<tr><td colspan="${headers.length}" class="table-cell" style="padding:14px;color:#64748b;font-size:13px;text-align:center;">${escapeHtml(emptyText)}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
   `;
 
   return `
     <!doctype html>
-    <html>
-      <body style="margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-        <div style="max-width:760px;margin:0 auto;padding:28px 18px;">
-          <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+        <title>Daily Activity Report - ${escapeHtml(day)}</title>
+        <style>
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            background-color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          table {
+            border-collapse: collapse !important;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+          }
+          @media screen and (max-width: 640px) {
+            .email-outer-wrap {
+              padding: 10px 6px !important;
+            }
+            .email-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              border-radius: 6px !important;
+            }
+            .header-box {
+              padding: 18px 16px !important;
+            }
+            .content-box {
+              padding: 16px 12px !important;
+            }
+            .header-title {
+              font-size: 22px !important;
+              line-height: 1.2 !important;
+            }
+            .section-title {
+              font-size: 16px !important;
+              margin: 20px 0 8px !important;
+            }
+            .metric-td {
+              display: block !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              padding: 0 0 8px 0 !important;
+              box-sizing: border-box !important;
+            }
+            .metric-card-inner {
+              padding: 10px 12px !important;
+            }
+            .metric-value {
+              font-size: 18px !important;
+            }
+            .metric-label {
+              font-size: 10px !important;
+            }
+            .table-scroll-wrapper {
+              margin-bottom: 16px !important;
+              border-radius: 6px !important;
+            }
+            .table-cell {
+              padding: 8px 8px !important;
+              font-size: 11px !important;
+            }
+          }
+        </style>
+      </head>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#f1f5f9;">
+          <tr>
+            <td align="center" class="email-outer-wrap" style="padding:24px 12px;">
+              <div class="email-container" style="max-width:760px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);text-align:left;">
 
-            <!-- Header -->
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#111827;">
-              <tr>
-                <td style="padding:24px 26px 22px;">
-                  <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#9ca3af;font-weight:700;">Daily Activity Report</div>
-                  <div style="margin:6px 0 0;font-size:30px;font-weight:800;color:#ffffff;line-height:1.1;">${escapeHtml(day)}</div>
-                </td>
-                <td style="padding:24px 26px 22px;text-align:right;vertical-align:middle;">
-                  <svg width="38" height="32" viewBox="0 0 38 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;">
-                    <rect x="0" y="20" width="10" height="12" fill="white" rx="2"/>
-                    <rect x="14" y="11" width="10" height="21" fill="white" rx="2"/>
-                    <rect x="28" y="0" width="10" height="32" fill="white" rx="2"/>
-                  </svg>
-                </td>
-              </tr>
-            </table>
+                <!-- Header -->
+                <div class="header-box" style="padding:22px 24px;background:#0f172a;color:#ffffff;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                    <tr>
+                      <td style="vertical-align:middle;">
+                        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;font-weight:700;">Daily Activity Report</div>
+                        <h1 class="header-title" style="margin:4px 0 0;font-size:26px;font-weight:800;color:#ffffff;line-height:1.15;">${escapeHtml(day)}</h1>
+                      </td>
+                      <td style="text-align:right;vertical-align:middle;">
+                        <svg width="34" height="28" viewBox="0 0 38 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;">
+                          <rect x="0" y="20" width="10" height="12" fill="white" rx="2"/>
+                          <rect x="14" y="11" width="10" height="21" fill="white" rx="2"/>
+                          <rect x="28" y="0" width="10" height="32" fill="white" rx="2"/>
+                        </svg>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
 
-            <!-- Card grid -->
-            <div style="padding:14px 16px 24px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                <!-- Row 1: Total Dealers | Total Outstanding | Reminders Sent Today -->
-                <tr>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL DEALERS</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(dealerGroups.size)}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL OUTSTANDING</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(totalOutstanding)}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">REMINDERS SENT TODAY</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(todayLogs.filter((entry) => entry.status === "sent").length)}</div>
-                    </div>
-                  </td>
-                </tr>
-                <!-- Per-bucket rows -->
-                ${bucketCardRows}
-              </table>
+                <!-- Card grid -->
+                <div class="content-box" style="padding:16px 20px 24px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;">
+                    <!-- Row 1: Total Dealers | Total Outstanding | Reminders Sent Today -->
+                    <tr>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL DEALERS</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(dealerGroups.size)}</div>
+                        </div>
+                      </td>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(totalOutstanding)}</div>
+                        </div>
+                      </td>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(todayLogs.filter((entry) => entry.status === "sent").length)}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- Per-bucket rows -->
+                    ${bucketCardRows}
+                  </table>
 
-              <!-- Top Dealers by Outstanding -->
-              <h2 style="font-size:18px;margin:24px 0 12px;color:#111827;font-weight:800;">Top Dealers by Outstanding (Amount)</h2>
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:24px;">
-                <thead>
-                  <tr style="background:#f9fafb;">
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">Rank</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">Dealer</th>
-                    <th align="left" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">Invoices</th>
-                    <th align="right" style="padding:12px 13px;border-bottom:1px solid #e5e7eb;color:#374151;font-size:12px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;">Outstanding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${topOutstandingRows || `<tr><td colspan="4" style="padding:14px;color:#6b7280;">No records found.</td></tr>`}
-                </tbody>
-              </table>
+                  <!-- Top Dealers by Outstanding -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Outstanding (Amount)</h2>
+                  ${table(["Rank", "Dealer", "Invoices", "Outstanding"], topOutstandingRows, "No records found.", "340px")}
 
-              <!-- Top Dealers by Overdue Days -->
-              <h2 style="font-size:18px;margin:24px 0 12px;color:#111827;font-weight:800;">Top Dealers by Overdue Days</h2>
-              ${table(["Rank", "Dealer", "Invoices", "Max Overdue", "Oldest Due", "Outstanding"], topOverdueRows, "No overdue dealers.")}
+                  <!-- Top Dealers by Overdue Days -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Overdue Days</h2>
+                  ${table(["Rank", "Dealer", "Invoices", "Max Overdue", "Oldest Due", "Outstanding"], topOverdueRows, "No overdue dealers.", "480px")}
 
-              <!-- Salesperson-wise Summary -->
-              <h2 style="font-size:18px;margin:24px 0 12px;color:#111827;font-weight:800;">Salesperson-wise Summary</h2>
-              ${table(["Salesperson", "Invoices", "Outstanding"], salespersonRows)}
-            </div>
+                  <!-- Salesperson-wise Summary -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Salesperson-wise Summary</h2>
+                  ${table(["Salesperson", "Invoices", "Outstanding"], salespersonRows, "No records found.", "320px")}
+                </div>
 
-          </div>
-        </div>
+              </div>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -348,9 +424,8 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
   const day = reportDate.toISOString().slice(0, 10);
   const logs = filterSharedCompanyRecords(database.reminderLogs, workspace.sharedOwnerIds);
   const todayLogs = logs.filter((entry) => logDay(entry) === day);
-  const todayDueIds = new Set(todayLogs.map((log) => log.dueId).filter(Boolean));
   const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds)
-    .filter((due) => todayDueIds.has(due.id));
+    .filter((due) => (due.amount || 0) > 0);
   const dealerGroups = groupBy(dues, (entry) => entry.companyName || entry.dealerCode);
   const salespersonGroups = groupBy(dues, (entry) => entry.salespersonName || entry.salespersonEmail);
   const failedLogs = todayLogs.filter((entry) => entry.status === "failed");
@@ -587,22 +662,22 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
 
     return `
       <tr>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">${escapeHtml(getDealerLabel(bracket.label))}</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(dealerCount)}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;word-break:break-word;">${escapeHtml(getDealerLabel(bracket.label))}</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(dealerCount)}</div>
           </div>
         </td>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL OUTSTANDING</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(formatCurrency(outstanding, currency))}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(formatCurrency(outstanding, currency))}</div>
           </div>
         </td>
-        <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-            <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">REMINDERS SENT TODAY</div>
-            <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(remindersSentToday)}</div>
+        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
+            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(remindersSentToday)}</div>
           </div>
         </td>
       </tr>
@@ -611,52 +686,124 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
 
   return `
     <!doctype html>
-    <html>
-      <body style="margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-        <div style="max-width:760px;margin:0 auto;padding:28px 18px;">
-          <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="x-apple-disable-message-reformatting">
+        <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+        <title>Salesperson Summary - ${escapeHtml(name)}</title>
+        <style>
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            background-color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          table {
+            border-collapse: collapse !important;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+          }
+          @media screen and (max-width: 640px) {
+            .email-outer-wrap {
+              padding: 10px 6px !important;
+            }
+            .email-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              border-radius: 6px !important;
+            }
+            .header-box {
+              padding: 18px 16px !important;
+            }
+            .content-box {
+              padding: 16px 12px !important;
+            }
+            .header-title {
+              font-size: 20px !important;
+              line-height: 1.25 !important;
+            }
+            .metric-td {
+              display: block !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              padding: 0 0 8px 0 !important;
+              box-sizing: border-box !important;
+            }
+            .metric-card-inner {
+              padding: 10px 12px !important;
+            }
+            .metric-value {
+              font-size: 18px !important;
+            }
+            .metric-label {
+              font-size: 10px !important;
+            }
+          }
+        </style>
+      </head>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#f1f5f9;">
+          <tr>
+            <td align="center" class="email-outer-wrap" style="padding:24px 12px;">
+              <div class="email-container" style="max-width:720px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);text-align:left;">
 
-            <!-- Header -->
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#111827;">
-              <tr>
-                <td style="padding:24px 26px 22px;">
-                  <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#9ca3af;font-weight:700;">SALESPERSON SUMMARY</div>
-                  <div style="margin:6px 0 0;font-size:30px;font-weight:800;color:#ffffff;line-height:1.1;">${escapeHtml(dayStr)}</div>
-                </td>
-              </tr>
-            </table>
+                <!-- Header -->
+                <div class="header-box" style="padding:22px 24px;background:#0f172a;color:#ffffff;">
+                  <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;font-weight:700;">SALESPERSON SUMMARY • ${escapeHtml(dayStr)}</div>
+                  <h1 class="header-title" style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;line-height:1.2;">${escapeHtml(name)}</h1>
+                </div>
 
-            <!-- Card grid -->
-            <div style="padding:14px 16px 24px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                <!-- Row 1: Total Dealers | Total Outstanding | Reminders Sent Today -->
-                <tr>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL DEALERS</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(uniqueDealers.size)}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">TOTAL OUTSTANDING</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(formatCurrency(totalOutstandingAmount, currency))}</div>
-                    </div>
-                  </td>
-                  <td style="width:33.33%;padding:4px 5px;vertical-align:top;">
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;background:#ffffff;">
-                      <div style="font-size:11px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;">REMINDERS SENT TODAY</div>
-                      <div style="font-size:26px;font-weight:800;margin-top:8px;color:#111827;">${escapeHtml(totalRemindersSent)}</div>
-                    </div>
-                  </td>
-                </tr>
-                <!-- Per-bucket rows -->
-                ${bucketCardRows}
-              </table>
-            </div>
+                <!-- Callout Notice -->
+                <div class="content-box" style="padding:20px 22px 10px;">
+                  <div style="background:#f8fafc;border-left:4px solid #0f766e;border-top:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.5;color:#334155;">
+                    <strong style="color:#0f766e;">Action Required:</strong> Dealers assigned to you have invoices with due dates coming up or already pending. Please contact each dealer, remind them about the pending invoices, and ask them to arrange payment. A detailed PDF statement is attached.
+                  </div>
+                </div>
 
-          </div>
-        </div>
+                <!-- Card grid -->
+                <div class="content-box" style="padding:0 22px 22px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;">
+                    <!-- Row 1: Total Dealers | Total Outstanding | Reminders Sent Today -->
+                    <tr>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL DEALERS</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(uniqueDealers.size)}</div>
+                        </div>
+                      </td>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(formatCurrency(totalOutstandingAmount, currency))}</div>
+                        </div>
+                      </td>
+                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
+                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
+                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
+                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(totalRemindersSent)}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- Per-bucket rows -->
+                    ${bucketCardRows}
+                  </table>
+                </div>
+
+              </div>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -666,37 +813,76 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
   const database = await readDatabase();
   const workspace = getCompanyWorkspaceContextForUser(database, user);
   const settings = getSettings(database, user);
-  const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds);
-  const groups = groupBy(
-    dues.filter((entry) => entry.salespersonEmail),
-    (entry) => entry.salespersonEmail
+  const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds)
+    .filter((due) => (due.amount || 0) > 0);
+
+  // Find all salespersons defined in the workspace
+  const configuredSalespersons = (database.salespersons || []).filter(
+    (sp) => workspace.sharedOwnerIds.has(sp.ownerId) || sp.ownerId === workspace.configOwnerId
   );
+
+  // Collect map of salesperson email -> { name, email, phone, records }
+  const salespersonMap = new Map<string, { name: string; email: string; phone?: string; records: DueRecord[] }>();
+
+  // 1. From database.salespersons
+  for (const sp of configuredSalespersons) {
+    const emailKey = sp.email.trim().toLowerCase();
+    if (!emailKey) continue;
+    const normalizedDealerCodes = (sp.dealerCodes || []).map(code => code.trim().toLowerCase());
+
+    const assignedDues = dues.filter(due => {
+      const dueDealerCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
+      const matchCode = normalizedDealerCodes.includes(dueDealerCode);
+      const matchEmail = (due.salespersonEmail || "").trim().toLowerCase() === emailKey;
+      const matchName = (due.salespersonName || "").trim().toLowerCase() === sp.name.trim().toLowerCase();
+      return matchCode || matchEmail || matchName;
+    });
+
+    salespersonMap.set(emailKey, {
+      name: sp.name,
+      email: sp.email,
+      phone: sp.phoneNumber,
+      records: assignedDues
+    });
+  }
+
+  // 2. From dues with salespersonEmail that might not be in database.salespersons
+  const groupedByDueEmail = groupBy(
+    dues.filter((entry) => entry.salespersonEmail),
+    (entry) => entry.salespersonEmail.trim().toLowerCase()
+  );
+
+  for (const [emailKey, records] of groupedByDueEmail.entries()) {
+    if (!salespersonMap.has(emailKey)) {
+      const name = records[0]?.salespersonName || emailKey;
+      salespersonMap.set(emailKey, {
+        name,
+        email: records[0]?.salespersonEmail || emailKey,
+        records
+      });
+    }
+  }
+
   const results: Array<{ email: string; skipped: boolean; recipientCount: number }> = [];
 
-  for (const [email, records] of groups.entries()) {
+  for (const [emailKey, spData] of salespersonMap.entries()) {
     try {
-      const name = records[0]?.salespersonName || email;
-      const salespersonLogs = sentLogs.filter((log) =>
-        records.some((due) => due.id === log.dueId || due.dealerCode === log.dealerCode)
-      );
+      const { name, email, phone, records } = spData;
 
-      // Skip if no reminders were sent today for this salesperson
-      if (salespersonLogs.length === 0) {
+      // If salesperson has no assigned dues, skip
+      if (records.length === 0) {
         results.push({ email, skipped: true, recipientCount: 0 });
         continue;
       }
 
-      const salespersonDueIds = new Set(salespersonLogs.map((log) => log.dueId).filter(Boolean));
-      const activeRecords = records.filter(
-        (due) =>
-          salespersonDueIds.has(due.id) ||
-          salespersonLogs.some((log) => log.dealerCode === due.dealerCode)
+      const salespersonLogs = sentLogs.filter((log) =>
+        records.some((due) => due.id === log.dueId || due.dealerCode === log.dealerCode)
       );
 
       // Generate Salesperson summary PDF
       const pdfBuffer = await generateSalespersonSummaryPDF(
         name,
-        activeRecords,
+        records,
         salespersonLogs,
         database.reminderRules
       );
@@ -713,24 +899,20 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         settings,
         [email],
         `Reminder Summary - ${name}`,
-        buildSalespersonSummaryText(name, activeRecords, salespersonLogs, database.reminderRules),
-        buildSalespersonSummaryHtml(name, activeRecords, salespersonLogs, database.reminderRules),
+        buildSalespersonSummaryText(name, records, salespersonLogs, database.reminderRules),
+        buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules),
         attachments
       );
       results.push({ email, ...result });
 
       // Check if salesperson has phone number to send WhatsApp notification
-      const salespersonObj = database.salespersons?.find(
-        (sp: any) => sp.email?.trim().toLowerCase() === email.trim().toLowerCase()
-      );
-      const phone = salespersonObj?.phoneNumber;
       if (phone && phone.trim()) {
         try {
           const driveFileName = `reminder-summary-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`;
           const pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, driveFileName);
           const totalOutstanding = formatCurrency(
-            activeRecords.reduce((sum, d) => sum + (d.amount || 0), 0),
-            activeRecords[0]?.currency || "INR"
+            records.reduce((sum, d) => sum + (d.amount || 0), 0),
+            records[0]?.currency || "INR"
           );
 
           await sendSalespersonSummaryWhatsapp(
@@ -744,8 +926,8 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         }
       }
     } catch (err) {
-      console.error(`Failed to send salesperson summary to ${email}:`, err);
-      results.push({ email, skipped: true, recipientCount: 0 });
+      console.error(`Failed to send salesperson summary to ${emailKey}:`, err);
+      results.push({ email: emailKey, skipped: true, recipientCount: 0 });
     }
   }
 
