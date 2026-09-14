@@ -33,8 +33,6 @@ import {
   formatEmailList
 } from "@/lib/utils";
 import { sendPaymentReminder } from "@/services/interaktService";
-import { generateOutstandingPDF } from "./pdf-generator";
-import { uploadPdfToGoogleDrive } from "@/services/googleDriveService";
 import { buildEmailBody, buildWhatsappBody } from "@/lib/defaults";
 
 type ReminderContext = {
@@ -202,9 +200,10 @@ function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): Pay
 function buildReplacements(context: ReminderContext, senderCompany: string) {
   const actualSenderCompany = "ARB Bearings Limited";
   const billDate = context.due.billDate || context.due.invoiceDate;
-  const invoiceAmount = formatCurrency(context.due.amount, context.due.currency);
+  const currentInvoiceDue = context.paymentSummary?.currentInvoiceDue ?? context.due.amount;
+  const invoiceAmount = formatCurrency(currentInvoiceDue, context.due.currency);
   const currentInvoiceDueAmount = formatCurrency(
-    context.paymentSummary.currentInvoiceDue,
+    currentInvoiceDue,
     context.due.currency
   );
   const previousDueAmount = formatCurrency(context.paymentSummary.previousDue, context.due.currency);
@@ -231,7 +230,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     current_invoice_due_amount: currentInvoiceDueAmount,
     daysBeforeDue: context.rule.triggerDay,
     dealer_name: context.due.companyName,
-    dealerCode: "",
+    dealerCode: context.due.dealerCode || context.due.customerCode || "",
     dueDate,
     due_date: dueDate,
     invoiceAmount,
@@ -242,7 +241,7 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     overdueDays: Math.max(0, (context.billAgeDays || 0) - 60),
     previousDueAmount,
     previous_due_amount: previousDueAmount,
-    pendingAmount: formatCurrency(context.due.amount, context.due.currency),
+    pendingAmount: invoiceAmount,
     reference: context.due.reference || context.due.invoiceNumber || "N/A",
     reminderDay: context.rule.triggerDay,
     senderCompany: actualSenderCompany,
@@ -495,7 +494,7 @@ export function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDues
   const cdEvaluation = evaluateCashDiscountEligibility(due, filteredDues, policies, today, currentRuleDay);
 
   // Box 1 Amount = sum of all dues for this dealer in the current rule stage
-  const box2Amount = calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today);
+  const box2Amount = log.relevantAmount ?? calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today);
 
   // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)
   const currentInvoiceAge = getBillAgeDays(due?.billDate || due?.invoiceDate || "", today) || 0;
@@ -510,7 +509,7 @@ export function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDues
   const box3Label = `Payment More Than ${currentRuleDay} Days`;
 
   // Total outstanding = sum of ALL dues for this dealer
-  const calculatedTotalOutstanding = filteredDues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const calculatedTotalOutstanding = log.totalOutstanding ?? filteredDues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
   // Box 1 Label
   let box2Label = "";
@@ -699,7 +698,7 @@ export function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDues
                         ${invoiceRows.join("") || `<tr><td colspan="4" class="table-cell" style="padding:14px;color:#64748b;font-size:13px;text-align:center;">No invoices found.</td></tr>`}
                         <tr style="background:#f8fafc;font-weight:bold;border-top:2px solid #e2e8f0;">
                           <td colspan="3" class="table-cell" style="padding:10px 12px;color:#0f172a;font-weight:800;font-size:13px;">Total Outstanding</td>
-                          <td class="table-cell" style="padding:10px 12px;text-align:right;color:#0f766e;font-weight:800;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(paymentSummary.totalDue, currency))}</td>
+                          <td class="table-cell" style="padding:10px 12px;text-align:right;color:#0f766e;font-weight:800;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(calculatedTotalOutstanding, currency))}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -918,10 +917,26 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
     // 2. Process each dealer
     for (const [dealerKey, dealerInvoices] of invoicesByDealer.entries()) {
       const representativeDue = dealerInvoices[0];
-      const contact = findMatchingMasterContact(representativeDue, contacts);
-      if (!contact) {
-        continue;
-      }
+      const matchingContact = findMatchingMasterContact(representativeDue, contacts);
+      const isContactMatched = Boolean(matchingContact);
+      const contact: MasterContact = matchingContact || {
+        id: "",
+        ownerId: workspace.configOwnerId,
+        dealerCode: representativeDue.dealerCode || representativeDue.customerCode || "",
+        customerCode: representativeDue.dealerCode || representativeDue.customerCode || "",
+        companyName: representativeDue.companyName,
+        primaryContact: representativeDue.companyName || "Accounts Team",
+        email: "",
+        whatsapp: "",
+        sms: "",
+        alternateContact: "",
+        notes: "",
+        salespersonId: representativeDue.salespersonId || "",
+        salespersonName: representativeDue.salespersonName || "",
+        salespersonEmail: representativeDue.salespersonEmail || "",
+        importedAt: "",
+        raw: {}
+      };
 
       // Calculate invoice age and sort from oldest to newest
       const invoicesWithAge = dealerInvoices
@@ -1104,6 +1119,9 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
 
       // Prevent duplicate sends if the scheduler runs more than once on the same day.
       const alreadyScheduledToday = database.reminderLogs.some((log) => {
+        if (log.status === "failed") {
+          return false;
+        }
         const logCode = (log.dealerCode || "").trim().toLowerCase();
         const logName = (log.dealerName || "").trim().toLowerCase();
         const matchesDealer = (targetCode && logCode && logCode === targetCode) || (targetName && logName && logName === targetName);
@@ -1212,16 +1230,103 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         };
       }
 
+      if (!isContactMatched) {
+        // Log unmatched dealer reminder for enabled channels
+        const channelsToCheck: ReminderLog["channel"][] = ["email", "whatsapp", "sms"];
+        for (const channel of channelsToCheck) {
+          const isChannelEnabled = rule.channels[channel];
+          if (!isChannelEnabled) continue;
+
+          const dedupeKey = buildReminderDedupeKey(oldestSelectedDue, rule, channel);
+          if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
+            continue;
+          }
+
+          created.push({
+            id: randomUUID(),
+            ownerId: workspace.workspaceId,
+            dueId: oldestSelectedDue.id,
+            dedupeKey,
+            contactId: "",
+            ruleId: rule.id,
+            templateId: template.id,
+            dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+            invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
+            reminderDay: rule.triggerDay,
+            billAgeDays: oldestSelectedDueAge,
+            cdEligible: cdEvaluation.eligible,
+            cdPolicyId: cdEvaluation.policy?.id || "",
+            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
+            cdReason: cdEvaluation.reason,
+            channel,
+            recipient: "No master contact",
+            scheduledFor,
+            status: "failed",
+            subject: `${rule.name} reminder - Missing Contact`,
+            content: `Reminder not queued: No matching master contact found in master database for dealer "${oldestSelectedDue.companyName}" (${oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "No Code"}).`,
+            failureReason: "No matching master contact found in master database",
+            sentAt: "",
+            createdAt: new Date().toISOString(),
+            dealerName: oldestSelectedDue.companyName,
+            reminderType,
+            selectedAgeingStage: stageLabel,
+            invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
+            relevantAmount,
+            totalOutstanding,
+            thresholdAmount
+          });
+        }
+        continue;
+      }
+
       const channelEntries = buildChannelEntries(rule, effectiveTemplate, contact, oldestSelectedDue, undefined, settings);
 
       for (const [channel, enabled, recipient, body] of channelEntries) {
-        if (!enabled || !recipient) {
+        if (!enabled) {
           continue;
         }
 
         const dedupeKey = buildReminderDedupeKey(oldestSelectedDue, rule, channel);
 
         if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
+          continue;
+        }
+
+        if (!recipient) {
+          // Channel is enabled on rule, but contact is missing email/phone
+          created.push({
+            id: randomUUID(),
+            ownerId: workspace.workspaceId,
+            dueId: oldestSelectedDue.id,
+            dedupeKey,
+            contactId: contact.id,
+            ruleId: rule.id,
+            templateId: template.id,
+            dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+            invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
+            reminderDay: rule.triggerDay,
+            billAgeDays: oldestSelectedDueAge,
+            cdEligible: cdEvaluation.eligible,
+            cdPolicyId: cdEvaluation.policy?.id || "",
+            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
+            cdReason: cdEvaluation.reason,
+            channel,
+            recipient: `Missing ${channel} contact details`,
+            scheduledFor,
+            status: "failed",
+            subject: `${rule.name} reminder - Missing ${channel}`,
+            content: `Reminder not queued: Contact "${contact.primaryContact || contact.companyName}" has no valid ${channel} address in master database.`,
+            failureReason: `Missing ${channel} contact details in master database`,
+            sentAt: "",
+            createdAt: new Date().toISOString(),
+            dealerName: oldestSelectedDue.companyName,
+            reminderType,
+            selectedAgeingStage: stageLabel,
+            invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
+            relevantAmount,
+            totalOutstanding,
+            thresholdAmount
+          });
           continue;
         }
 
@@ -1282,7 +1387,14 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       }
     }
 
-    database.reminderLogs.push(...created);
+    if (created.length > 0) {
+      const createdKeys = new Set(created.map((c) => `${c.dedupeKey}|${c.scheduledFor}`));
+      // Replace any existing failed logs for the same dedupeKey and scheduledFor
+      database.reminderLogs = database.reminderLogs.filter(
+        (log) => !(log.status === "failed" && createdKeys.has(`${log.dedupeKey}|${log.scheduledFor}`))
+      );
+      database.reminderLogs.push(...created);
+    }
     return created;
   });
 }
@@ -1342,9 +1454,10 @@ export async function createManualRemindersForDue(
     );
     const rawPaymentSummary = buildPaymentSummary(due, allDuesForDealer);
     const ruleOutstanding = calculateRuleOutstanding(allDuesForDealer, rule.triggerDay, new Date());
+    const relevantAmount = ruleOutstanding > 0 ? ruleOutstanding : due.amount;
     const paymentSummary = {
-      currentInvoiceDue: ruleOutstanding,
-      previousDue: rawPaymentSummary.totalDue - ruleOutstanding,
+      currentInvoiceDue: relevantAmount,
+      previousDue: rawPaymentSummary.totalDue - relevantAmount,
       totalDue: rawPaymentSummary.totalDue,
       previousDues: rawPaymentSummary.previousDues
     };
@@ -1476,8 +1589,7 @@ async function sendEmail(
   settings: DispatchSettings,
   due?: DueRecord,
   allDuesForDealer: DueRecord[] = [],
-  database?: any,
-  pdfBuffer?: Buffer
+  database?: any
 ) {
   const transporter = nodemailer.createTransport({
     host: settings.smtpHost,
@@ -1494,13 +1606,6 @@ async function sendEmail(
       : undefined
   });
 
-  const attachments = pdfBuffer && due ? [
-    {
-      filename: "outstanding-statement.pdf",
-      content: pdfBuffer
-    }
-  ] : undefined;
-
   const recipients = parseEmailList(log.recipient);
   const to = recipients.length > 0 ? recipients : log.recipient;
 
@@ -1509,8 +1614,7 @@ async function sendEmail(
     to,
     subject: log.subject,
     text: log.content,
-    html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content),
-    attachments
+    html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content)
   });
 }
 
@@ -1651,7 +1755,15 @@ export async function getEmailContentForLog(
     (entry: any) => entry.ownerId === log.ownerId || entry.ownerId === due.ownerId
   );
   
-  const paymentSummary = buildPaymentSummary(due, allDuesForDealer);
+  const rawPaymentSummary = buildPaymentSummary(due, allDuesForDealer);
+  const targetCurrentDue = log.relevantAmount ?? calculateRuleOutstanding(allDuesForDealer, rule.triggerDay, new Date());
+  const actualCurrentDue = targetCurrentDue > 0 ? targetCurrentDue : rawPaymentSummary.currentInvoiceDue;
+  const paymentSummary = {
+    currentInvoiceDue: actualCurrentDue,
+    previousDue: (log.totalOutstanding ?? rawPaymentSummary.totalDue) - actualCurrentDue,
+    totalDue: log.totalOutstanding ?? rawPaymentSummary.totalDue,
+    previousDues: rawPaymentSummary.previousDues
+  };
   const cdEvaluation = evaluateCashDiscountEligibility(
     due,
     allDuesForDealer,
@@ -1697,57 +1809,12 @@ async function sendInteraktWhatsapp(
     throw new Error("WhatsApp reminder requires an invoice record.");
   }
 
-  // 1. Get all outstanding dues for this customer and sort them chronologically (oldest first)
-  const unsortedDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
-  const dealerDues = [...unsortedDues].sort((a, b) => {
-    const dateA = a.billDate || a.invoiceDate || "";
-    const dateB = b.billDate || b.invoiceDate || "";
-    return dateA.localeCompare(dateB);
-  });
-  const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const currency = due.currency || "INR";
-  const customerName = due.companyName || due.matchedContactName || "Customer";
-  const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
-
-  // 2. Fetch the corresponding email template content so the PDF has the exact email message body
-  let pdfMessageBody = log.content;
-  if (database) {
-    try {
-      pdfMessageBody = await getEmailContentForLog(log, due, dealerDues, database);
-    } catch (e) {
-      console.error("Failed to generate email content for WhatsApp PDF:", e);
-    }
-  }
-
-  // Generate PDF — includes the same reminder message text as the email
-  const pdfBuffer = await generateOutstandingPDF(
-    customerName,
-    dealerCode,
-    dealerDues,
-    totalAmount,
-    currency,
-    pdfMessageBody,
-    log.dueId,
-    log.ruleId,
-    database
-  );
-
-  // 3. Upload to Google Drive and get shareable public direct download link
-  const fileName = `outstanding-statement-${log.id}.pdf`;
-  let mediaUrl = "";
-  try {
-    mediaUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
-    log.pdfUrl = mediaUrl;
-  } catch (err) {
-    console.error(`Failed to upload PDF statement to Drive/Catbox for log ${log.id}:`, err);
-  }
-
-  // 4. Send WhatsApp with the PDF document
   const contactName = (due.matchedContactName && due.matchedContactName !== "Accounts Team")
     ? due.matchedContactName
     : (due.companyName || "Customer");
-  const invoiceNumber = due.invoiceNumber || due.reference || "";
-  const formattedAmount = (due.amount || 0).toLocaleString("en-IN", {
+  const invoiceNumber = log.invoiceNumber || due.invoiceNumber || due.reference || "";
+  const actualAmount = log.relevantAmount ?? due.amount ?? 0;
+  const formattedAmount = actualAmount.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -1756,7 +1823,7 @@ async function sendInteraktWhatsapp(
 
   const bodyValues = [contactName, invoiceNumber, formattedAmount, overdueDays];
 
-  await sendPaymentReminder(log.recipient, bodyValues, mediaUrl, `statement.pdf`);
+  await sendPaymentReminder(log.recipient, bodyValues);
 }
 
 async function deliverReminder(
@@ -1775,52 +1842,7 @@ async function deliverReminder(
       throw new Error("SMTP settings are incomplete.");
     }
 
-    let pdfBuffer: Buffer | undefined;
-    let pdfUrl: string | undefined;
-
-    if (due) {
-      const unsortedDues = allDuesForDealer.length > 0 ? allDuesForDealer : [due];
-      const dealerDues = [...unsortedDues].sort((a, b) => {
-        const dateA = a.billDate || a.invoiceDate || "";
-        const dateB = b.billDate || b.invoiceDate || "";
-        return dateA.localeCompare(dateB);
-      });
-      const totalAmount = dealerDues.reduce((sum, item) => sum + (item.amount || 0), 0);
-      const currency = due.currency || "INR";
-      const customerName = due.companyName || due.matchedContactName || "Customer";
-      const dealerCode = due.dealerCode || due.customerCode || log.dealerCode || "-";
-
-      let pdfMessageBody = log.content;
-      if (database) {
-        try {
-          pdfMessageBody = await getEmailContentForLog(log, due, dealerDues, database);
-        } catch (e) {
-          console.error("Failed to generate email content for PDF:", e);
-        }
-      }
-
-      pdfBuffer = await generateOutstandingPDF(
-        customerName,
-        dealerCode,
-        dealerDues,
-        totalAmount,
-        currency,
-        pdfMessageBody,
-        log.dueId,
-        log.ruleId,
-        database
-      );
-
-      const fileName = `outstanding-statement-${log.id}.pdf`;
-      try {
-        pdfUrl = await uploadPdfToGoogleDrive(pdfBuffer, fileName);
-        log.pdfUrl = pdfUrl;
-      } catch (err) {
-        console.error(`Failed to upload PDF statement to Drive/Catbox for log ${log.id}:`, err);
-      }
-    }
-
-    await sendEmail(log, settings, due, allDuesForDealer, database, pdfBuffer);
+    await sendEmail(log, settings, due, allDuesForDealer, database);
     return "sent" as const;
   }
 

@@ -62,9 +62,23 @@ export async function GET() {
   const refPrefixes = ["OR", "NB", "CD", "AP", "ZN", "MX", "NV", "PN", "SM", "HZ"];
 
   const rows = enabledRules.map((rule, index) => {
-    const fireBillAge = rule.triggerDay - 5;        // e.g. 30-day rule → bill age 25
+    let fireBillAge = rule.triggerDay - 5;
+    if (rule.triggerDay === 120) {
+      fireBillAge = 125; // Age > 120 for 120+ bucket
+    } else if (rule.triggerDay === 90) {
+      fireBillAge = 95;  // Age 90-120 for 90+ bucket
+    } else if (rule.triggerDay === 75) {
+      fireBillAge = 75;  // Age 60-90 for 60+ bucket
+    } else if (rule.triggerDay === 60) {
+      fireBillAge = 55;  // Age 50-60 for 60d bucket
+    } else if (rule.triggerDay === 45) {
+      fireBillAge = 42;  // Age 40-45 for 2% CD bucket
+    } else if (rule.triggerDay === 30) {
+      fireBillAge = 28;  // Age 25-30 for 3% CD bucket
+    }
+
     const billDate = offsetDate(fireBillAge);        // back-calc from today
-    const dueDate  = offsetDate(fireBillAge - rule.triggerDay); // due date = bill date + triggerDay
+    const dueDate  = offsetDate(fireBillAge > 30 ? fireBillAge - 30 : 0);
 
     const party  = partyNames[index % partyNames.length];
     const prefix = refPrefixes[index % refPrefixes.length];

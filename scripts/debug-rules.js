@@ -35,14 +35,10 @@ async function main() {
       return;
     }
 
-    const user = doc.users.find(u => u.email === 'amankumarschool7@gmail.com');
-    const ownerId = user.id;
-
-    console.log(`User ID: ${ownerId}`);
-    const rules = doc.reminderRules?.filter(r => r.ownerId === ownerId);
-    console.log(`Total rules for user: ${rules?.length || 0}`);
-    rules?.forEach(r => {
-      console.log(`- Rule: "${r.name}", Trigger: ${r.triggerDay}, Enabled: ${r.enabled}`);
+    console.log('--- ALL RULES & TEMPLATES ---');
+    (doc.reminderRules || []).forEach(r => {
+      const t = (doc.templates || []).find(tpl => tpl.id === r.templateId || tpl.ruleId === r.id);
+      console.log(`- Rule [${r.triggerDay}d]: "${r.name}" | Enabled: ${r.enabled} | Template: "${t ? t.name : 'NONE'}"`);
     });
   } catch (err) {
     console.error('Error:', err);
@@ -52,3 +48,4 @@ async function main() {
 }
 
 main();
+

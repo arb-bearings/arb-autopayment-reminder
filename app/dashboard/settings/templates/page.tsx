@@ -184,9 +184,9 @@ function RuleForm({ rule, template }: { rule?: ReminderRule; template?: Reminder
       <div className="rule-span">
         <input type="hidden" name="pdfBoxControlsPresent" value="true" />
         <div className="section-heading" style={{ marginBottom: 8 }}>
-          <h3 style={{ fontSize: "0.95em", margin: 0 }}>Summary boxes (Email & PDF)</h3>
+          <h3 style={{ fontSize: "0.95em", margin: 0 }}>Summary boxes (Email)</h3>
           <p style={{ margin: "4px 0 0", fontSize: "0.82em", color: "var(--muted)" }}>
-            Control which summary boxes appear in both the email body and PDF attachment, and customise their headings.
+            Control which summary boxes appear in the reminder email body, and customise their headings.
             Leave a heading blank to use the auto-generated text.
           </p>
         </div>

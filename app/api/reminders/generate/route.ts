@@ -17,18 +17,23 @@ export async function POST(request: Request) {
     }
     await requireOperationPassword(user, "dispatch", operationPassword);
     const generated = await generateRemindersForUser(user.id, generationDate || undefined, forceAllRules);
+    const matchedCount = generated.filter((entry) => entry.status === "pending" || entry.status === "sent").length;
+    const missingCount = generated.filter((entry) => entry.status === "failed").length;
+
     await recordAuditLog(
       user,
       "Reminder Dispatch",
       "success",
-      `Generated ${generated.length} reminders.`
+      `Generated ${generated.length} reminders (${matchedCount} matched, ${missingCount} missing contacts).`
     );
+
+    const message = missingCount > 0
+      ? `Generated ${generated.length} reminders (${matchedCount} contacts matched, ${missingCount} missing contacts). Click "View Breakdown Table" under the generate button to inspect details.`
+      : `Generated ${generated.length} eligible reminders with all contacts matched. Review the queue, then send reminders when ready.`;
 
     return NextResponse.redirect(
       new URL(
-        `/dashboard/dues?message=${encodeURIComponent(
-          `Generated ${generated.length} eligible reminders. Review the queue, then send reminders when ready. Reports will be sent after reminders are sent.`
-        )}`,
+        `/dashboard/dues?message=${encodeURIComponent(message)}`,
         request.url
       ),
       { status: 303 }

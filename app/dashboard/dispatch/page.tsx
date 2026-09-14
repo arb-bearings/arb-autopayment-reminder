@@ -13,6 +13,7 @@ import { readDatabase } from "@/lib/storage";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { ReminderQueueTableDispatch } from "@/components/reminder-queue-table-dispatch";
+import { TodayGenerationSummary } from "@/components/today-generation-summary";
 
 
 export default async function DispatchPage({
@@ -140,11 +141,17 @@ export default async function DispatchPage({
               <form action="/api/reminders/generate" method="post" className="dispatch-form">
                 <input type="hidden" name="forceAllRules" value="true" />
                 <GenerationDateField />
-                <TodayGenerationNotice count={todayGeneratedLogs.length} />
                 <ProtectedSubmitButton className="button" promptOnSubmitOnly={true}>
                   Generate eligible reminders
                 </ProtectedSubmitButton>
               </form>
+
+              <TodayGenerationSummary
+                todayGeneratedLogs={todayGeneratedLogs}
+                masterContacts={masterContacts}
+                dueRecords={dueRecords}
+                isAdmin={isAdmin}
+              />
 
               <div className="dispatch-form">
                 <ProtectedSubmitButton
@@ -259,19 +266,6 @@ export default async function DispatchPage({
         </article>
       </section>
     </DashboardShell>
-  );
-}
-
-function TodayGenerationNotice({ count }: { count: number }) {
-  if (count === 0) {
-    return null;
-  }
-
-  return (
-    <p className="status-banner status-warning">
-      Today&apos;s reminders are already generated: {count} queue record{count === 1 ? "" : "s"}.
-      Generating again will skip duplicate invoice, rule, channel, and date combinations.
-    </p>
   );
 }
 

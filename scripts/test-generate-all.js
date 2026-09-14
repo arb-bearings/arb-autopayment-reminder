@@ -51,7 +51,7 @@ async function main() {
   const collection = db.collection(env.MONGODB_COLLECTION || 'app_state');
 
   const doc = await collection.findOne({ _id: 'primary' });
-  const targetUser = doc.users.find(u => u.email === 'amankumarschool7@gmail.com');
+  const targetUser = doc.users[0];
 
   let session = doc.sessions?.find(s => s.userId === targetUser.id && new Date(s.expiresAt) > new Date());
   if (!session) {
