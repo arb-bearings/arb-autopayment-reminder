@@ -13,6 +13,7 @@ import { readDatabase } from "@/lib/storage";
 import { ensureStoredDueWorkbook } from "@/lib/workbook-sync";
 import { formatCurrency, formatDate, formatElapsedDaysTag } from "@/lib/utils";
 import { ReminderQueueTableDues } from "@/components/reminder-queue-table-dues";
+import { TodayGenerationSummary } from "@/components/today-generation-summary";
 
 
 export default async function DuesPage({
@@ -152,11 +153,17 @@ export default async function DuesPage({
               <form action="/api/reminders/generate" method="post" className="dispatch-form">
                 <input type="hidden" name="forceAllRules" value="true" />
                 <GenerationDateField />
-                <TodayGenerationNotice count={todayGeneratedLogs.length} />
                 <ProtectedSubmitButton className="button button-secondary" promptOnSubmitOnly={true}>
                   Generate eligible reminders
                 </ProtectedSubmitButton>
               </form>
+
+              <TodayGenerationSummary
+                todayGeneratedLogs={todayGeneratedLogs}
+                masterContacts={masterContacts}
+                dueRecords={dueRecords}
+                isAdmin={isAdmin}
+              />
 
               <div className="dispatch-form">
                 <ProtectedSubmitButton
@@ -314,19 +321,6 @@ export default async function DuesPage({
         </article>
       </section>
     </DashboardShell>
-  );
-}
-
-function TodayGenerationNotice({ count }: { count: number }) {
-  if (count === 0) {
-    return null;
-  }
-
-  return (
-    <p className="status-banner status-warning">
-      Today&apos;s reminders are already generated: {count} queue record{count === 1 ? "" : "s"}.
-      Generating again will skip duplicate invoice, rule, channel, and date combinations.
-    </p>
   );
 }
 
