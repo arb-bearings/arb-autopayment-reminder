@@ -43,6 +43,7 @@ type DueRowChanges = {
   dueDate: string;
   openingAmount: string;
   amount: string;
+  quantity?: string;
   currency: string;
   overdueDays: string;
   reference: string;
@@ -184,11 +185,19 @@ const dueFieldCandidates = {
     "invoice date",
     "invoice dt",
     "document date",
-    "posting date"
+    "posting date",
+    "month",
+    "invoice month",
+    "billing month",
+    "period"
   ],
   dueDate: ["due date", "payment due date", "reminder date", "due dt", "due on"],
   openingAmount: ["opening amount", "opening amt", "opening balance", "opening"],
   amount: [
+    "with gst value",
+    "with gst",
+    "gst value",
+    "basic value",
     "pending",           // ← user's actual Excel column name
     "pending amount",
     "pending amt",
@@ -218,11 +227,42 @@ const dueFieldCandidates = {
     "amount due",
     "net due",
     "payable amount",
-    "credit amount"
+    "credit amount",
+    "total value",
+    "total amount"
+  ],
+  quantity: [
+    "qty",
+    "qty.",
+    "quantity",
+    "stock",
+    "stock qty",
+    "stock quantity",
+    "billed qty",
+    "invoice qty",
+    "nos",
+    "pcs",
+    "units",
+    "total qty"
   ],
   currency: ["currency"],
   overdueDays: ["overdue by days", "overdue by day", "overdue days", "ageing days", "overdue"],
-  reference: ["reference", "reference number", "po number", "po no"],
+  reference: [
+    "bearing no",
+    "bearing no.",
+    "bearing number",
+    "item",
+    "item no",
+    "item no.",
+    "part no",
+    "part no.",
+    "part number",
+    "category",
+    "reference",
+    "reference number",
+    "po number",
+    "po no"
+  ],
   notes: ["notes", "remarks", "comment"],
   totalDueAmount: ["total due amount", "total outstanding amount", "total outstanding", "total_due_amount"],
   salespersonId: ["salesperson id", "sales person id", "employee id", "sales employee id", "salesperson_id"],
@@ -350,13 +390,14 @@ function toDateValue(value: unknown) {
       }
     }
 
-    const monthNameMatch = text.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+    const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+    const monthNameMatch = text.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{2,4})$/);
 
     if (monthNameMatch) {
       const day = Number(monthNameMatch[1]);
-      const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(
-        monthNameMatch[2].toLowerCase()
-      );
+      const prefix = monthNameMatch[2].slice(0, 3).toLowerCase();
+      const month = monthNames.indexOf(prefix);
       const year = Number(
         monthNameMatch[3].length === 2 ? `20${monthNameMatch[3]}` : monthNameMatch[3]
       );
@@ -370,6 +411,24 @@ function toDateValue(value: unknown) {
           parsed.getUTCMonth() === month &&
           parsed.getUTCDate() === day
         ) {
+          return parsed.toISOString();
+        }
+      }
+    }
+
+    // Support Month-Year formats like "Apr-24", "Apr-2024", "April-24", "Apr/2024", "Apr 24"
+    const monthYearMatch = text.match(/^([A-Za-z]{3,9})[-/ ](\d{2,4})$/);
+    if (monthYearMatch) {
+      const prefix = monthYearMatch[1].slice(0, 3).toLowerCase();
+      const month = monthNames.indexOf(prefix);
+      const year = Number(
+        monthYearMatch[2].length === 2 ? `20${monthYearMatch[2]}` : monthYearMatch[2]
+      );
+
+      if (month >= 0) {
+        const parsed = new Date(Date.UTC(year, month, 1));
+
+        if (!Number.isNaN(parsed.getTime())) {
           return parsed.toISOString();
         }
       }
@@ -979,6 +1038,9 @@ function applyDueRowChanges(row: RawRow, changes: DueRowChanges) {
     changes.openingAmount
   );
   nextRow = setRowField(nextRow, dueFieldCandidates.amount, "Pending Amount", changes.amount);
+  if (changes.quantity !== undefined) {
+    nextRow = setRowField(nextRow, dueFieldCandidates.quantity, "QTY.", changes.quantity);
+  }
   nextRow = setRowField(nextRow, dueFieldCandidates.currency, "Currency", changes.currency);
   nextRow = setRowField(
     nextRow,
@@ -1099,6 +1161,7 @@ export function mapDueRows(rows: RawRow[], ownerId: string, contacts: MasterCont
       const companyName = toText(pickValue(row, dueFieldCandidates.companyName));
       const billDate = toDateValue(pickValue(row, dueFieldCandidates.billDate));
       const pendingAmount = toAmount(pickValue(row, dueFieldCandidates.amount));
+      const quantity = toAmount(pickValue(row, dueFieldCandidates.quantity));
       const contactByDealer = matchMasterContactByDealerCode(dealerCode, contacts);
       const match = buildDueContactMatch(
         {
@@ -1127,6 +1190,7 @@ export function mapDueRows(rows: RawRow[], ownerId: string, contacts: MasterCont
         dueDate: toDateValue(pickValue(row, dueFieldCandidates.dueDate)),
         openingAmount: toAmount(pickValue(row, dueFieldCandidates.openingAmount)),
         amount: pendingAmount,
+        quantity,
         currency: toText(pickValue(row, dueFieldCandidates.currency)) || "INR",
         overdueDays: Math.max(0, Math.round(toAmount(pickValue(row, dueFieldCandidates.overdueDays)))),
         reference: toText(pickValue(row, dueFieldCandidates.reference)),

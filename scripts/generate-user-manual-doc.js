@@ -1,0 +1,835 @@
+const fs = require("fs");
+const path = require("path");
+
+const docContent = `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset='utf-8'>
+<title>Auto Payment Reminder - Complete User Manual & Tutorial</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  @page {
+    size: A4;
+    margin: 2cm 2cm 2cm 2cm;
+    mso-header-margin: 1cm;
+    mso-footer-margin: 1cm;
+  }
+  body {
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    color: #1e293b;
+    line-height: 1.6;
+    font-size: 11pt;
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+  }
+  .title-page {
+    text-align: center;
+    padding: 40px 20px 30px;
+    border-bottom: 3px solid #0f766e;
+    margin-bottom: 30px;
+    background: #f8fafc;
+  }
+  .title-main {
+    font-size: 26pt;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.5px;
+  }
+  .title-sub {
+    font-size: 14pt;
+    color: #0f766e;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+  }
+  .meta-box {
+    display: inline-block;
+    text-align: left;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px 24px;
+    font-size: 10pt;
+    color: #475569;
+    margin-top: 15px;
+  }
+  h1 {
+    font-size: 18pt;
+    color: #0f172a;
+    border-bottom: 2px solid #0f766e;
+    padding-bottom: 6px;
+    margin-top: 36px;
+    margin-bottom: 14px;
+    page-break-after: avoid;
+  }
+  h2 {
+    font-size: 14pt;
+    color: #0f766e;
+    margin-top: 24px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    color: #334155;
+    margin-top: 18px;
+    margin-bottom: 8px;
+    page-break-after: avoid;
+  }
+  p, li {
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: #334155;
+  }
+  ul, ol {
+    margin-top: 6px;
+    margin-bottom: 14px;
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0 24px 0;
+    font-size: 10pt;
+  }
+  th {
+    background-color: #0f172a;
+    color: #ffffff;
+    font-weight: bold;
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid #0f172a;
+  }
+  td {
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td {
+    background-color: #f8fafc;
+  }
+  .callout {
+    background-color: #f0fdfa;
+    border-left: 4px solid #0f766e;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout-warning {
+    background-color: #fffbeb;
+    border-left: 4px solid #d97706;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout-danger {
+    background-color: #fef2f2;
+    border-left: 4px solid #dc2626;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 8.5pt;
+    font-weight: 700;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #1e293b;
+  }
+  .badge-primary { background: #ccfbf1; color: #0f766e; }
+  .badge-danger { background: #fee2e2; color: #991b1b; }
+  .badge-warning { background: #fef3c7; color: #92400e; }
+  .badge-success { background: #dcfce7; color: #166534; }
+  .code-block {
+    background: #0f172a;
+    color: #f8fafc;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 9.5pt;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin: 12px 0;
+    white-space: pre-wrap;
+    line-height: 1.4;
+  }
+  .step-num {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background: #0f766e;
+    color: #ffffff;
+    font-weight: bold;
+    text-align: center;
+    border-radius: 50%;
+    margin-right: 8px;
+    font-size: 9.5pt;
+    line-height: 24px;
+  }
+  .workflow-step {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+  }
+  .pw-highlight {
+    font-family: Consolas, monospace;
+    font-weight: bold;
+    color: #0f766e;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+  }
+</style>
+</head>
+<body>
+
+<div class="title-page">
+  <div class="title-main">ARB BEARINGS LIMITED</div>
+  <div class="title-main" style="font-size: 20pt; color: #0f766e;">Automated Payment Reminder & Dues Tracking System</div>
+  <div class="title-sub">Complete End-to-End Operational Manual & Administrator Guide</div>
+  <div class="meta-box">
+    <strong>System Version:</strong> Production Release 2.0<br>
+    <strong>Primary Company Account:</strong> ARB Bearing pvt. limited (arbbearings.marketing@gmail.com)<br>
+    <strong>Target Audience:</strong> Super Admins, Operations Team, Accounts Department, Sales Managers<br>
+    <strong>Document Purpose:</strong> Complete Setup, Configuration, Daily Operations, and Troubleshooting Guide
+  </div>
+</div>
+
+<h1>1. System Overview & Architecture</h1>
+<p>
+  The <strong>Auto Payment Reminder</strong> platform is an enterprise-grade automated communications and receivables management system designed specifically for <strong>ARB Bearings Limited</strong>. The system automates the ingestion of dealer master contacts and ERP invoice dues sheets, applies intelligent multi-stage aging algorithms, calculates Cash Discount (CD) incentives, generates dynamic PDF statements, and dispatches targeted reminders across <strong>Email</strong>, <strong>WhatsApp</strong>, and <strong>SMS</strong>.
+</p>
+
+<h2>Core Architectural Workflow</h2>
+<ol>
+  <li><strong>Master Contact Ingestion:</strong> Maintains a verified directory of all dealers, authorized contact persons, multiple email addresses, WhatsApp/mobile numbers, and salesperson assignments (managed by Admins).</li>
+  <li><strong>Dues Ledger Ingestion:</strong> Regularly imports the latest open receivables ledger exported from ERP (Tally, SAP, Busy, etc.). Standard users and Admins can upload dues sheets.</li>
+  <li><strong>Smart Contact Matching Engine:</strong> Automatically correlates due records to master records using Dealer Code and Company Name fallbacks.</li>
+  <li><strong>Multi-Bucket Aging & Threshold Engine:</strong> Groups invoices into 6 non-overlapping aging buckets (120+ days, 90–120 days, 60–90 days, 45–60 days, 40–45 days [2% CD], and 25–30 days [3% CD]) and applies a configurable minimum outstanding threshold (e.g. ₹10,000).</li>
+  <li><strong>Cash Discount (CD) Engine:</strong> Calculates eligibility for 3% (30-day window) and 2% (45-day window) cash discounts while dynamically validating whether older unpaid bills exist.</li>
+  <li><strong>Dynamic PDF Generator:</strong> Creates branded, professional PDF invoices and dealer statements, as well as Salesperson Summary Statements with Google Drive cloud hosting for WhatsApp links.</li>
+  <li><strong>Multi-Channel Dispatch Engine:</strong> Dispatches personalized emails via SMTP (Nodemailer), rich WhatsApp notifications via Interakt Official API, and SMS via Twilio.</li>
+  <li><strong>Salesperson Daily Summaries:</strong> Automatically emails and WhatsApps each salesperson an itemized PDF report of their dealers' pending invoices and reminder activity.</li>
+  <li><strong>Daily Activity & Executive Reports:</strong> Delivers daily summary analytics to company directors and management.</li>
+</ol>
+
+<hr/>
+
+<h1>2. User Account Creation & Role-Based Access Control (RBAC)</h1>
+<p>The system enforces strict Role-Based Access Control (RBAC) across three distinct user roles.</p>
+
+<h2>Comprehensive Role & Permission Matrix</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Role</th>
+      <th>View Dues & Queue</th>
+      <th>Master Database (View/Upload)</th>
+      <th>Upload Due Sheet</th>
+      <th>Generate Reminders</th>
+      <th>Send Reminders</th>
+      <th>Rules & System Settings</th>
+      <th>User & Password Management</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Super Admin</strong></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes (Full)</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes (Full Control)</span></td>
+    </tr>
+    <tr>
+      <td><strong>Admin</strong></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes (Full)</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-danger">Restricted</span></td>
+    </tr>
+    <tr>
+      <td><strong>Standard User</strong></td>
+      <td><span class="badge badge-success">Yes</span></td>
+      <td><span class="badge badge-danger">No (Hidden / Restricted)</span></td>
+      <td><span class="badge badge-success">Yes (Allowed)</span></td>
+      <td><span class="badge badge-success">Yes (Allowed)</span></td>
+      <td><span class="badge badge-success">Yes (Allowed with PIN)</span></td>
+      <td><span class="badge badge-danger">No</span></td>
+      <td><span class="badge badge-danger">No</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Key Operational Rules for Standard Users:</strong><br>
+  &bull; <strong>Master Database Privacy:</strong> Standard Users cannot view or upload the Master Contact Database. The Master menu and contact sheets are strictly restricted to Admins.<br>
+  &bull; <strong>Daily Dues Uploading:</strong> Standard Users <strong>can</strong> upload daily Dues Sheets from Tally/SAP into the workspace.<br>
+  &bull; <strong>Reminder Generation & Sending:</strong> Standard Users <strong>can</strong> generate reminder queues and send reminders to dealers (using the Dispatch Operation Password <span class="pw-highlight">12345678</span>).
+</div>
+
+<h2>Current Active Account in System</h2>
+<p>The system currently has the following primary workspace administrator account configured in the database:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Organization / Company</th>
+      <th>User Name</th>
+      <th>Login Email</th>
+      <th>Role</th>
+      <th>Manual Reminder Permission</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>ARB Bearing pvt. limited</strong></td>
+      <td>Team ARB Bearings</td>
+      <td><code>arbbearings.marketing@gmail.com</code></td>
+      <td><span class="badge badge-primary">super_admin</span></td>
+      <td><span class="badge badge-success">Granted (Full Access)</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Step-by-Step: Creating a New User Account</h2>
+<ol>
+  <li>Log in with a <strong>Super Admin</strong> account (e.g. <code>arbbearings.marketing@gmail.com</code>).</li>
+  <li>Navigate to <strong>Admin Panel &rarr; User Management</strong> (URL: <code>/dashboard/settings/users</code>).</li>
+  <li>Under the <strong>Create User</strong> panel on the left:
+    <ul>
+      <li><strong>Name:</strong> Enter the user's full name (e.g. <em>Ramesh Sharma</em>).</li>
+      <li><strong>Email:</strong> Enter their corporate email (e.g. <em>ramesh.sharma@arbbearings.com</em>).</li>
+      <li><strong>Password:</strong> Enter an initial login password of at least 8 characters.</li>
+      <li><strong>Role:</strong> Select <code>User</code>, <code>Admin</code>, or <code>Super Admin</code>.</li>
+      <li><strong>Can manually send reminders:</strong> Check this box to enable reminder dispatch rights for this user.</li>
+    </ul>
+  </li>
+  <li>Click <strong>Save User</strong>.</li>
+</ol>
+
+<h2>Step-by-Step: Updating User Passwords & Roles</h2>
+<ol>
+  <li>In <strong>User Management</strong>, locate the user in the <strong>Workspace Users</strong> table.</li>
+  <li>Click the <strong>Edit</strong> button next to their name.</li>
+  <li>To change their login password, enter the new password in <strong>New Password</strong> (leave blank if keeping existing).</li>
+  <li>Modify role or manual sending permissions as needed, then click <strong>Update User</strong>.</li>
+</ol>
+
+<hr/>
+
+<h1>3. Security: Active Operation Passwords (PIN Quick Reference)</h1>
+<p>
+  To prevent unauthorized mass communications, accidental data erasure, or misconfiguration, critical actions are guarded by <strong>Operation Passwords (PINs)</strong>.
+</p>
+
+<h2>Active Operation Passwords Table</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Operational Step / Action</th>
+      <th>Internal Key</th>
+      <th>Configured Password</th>
+      <th>Who Can Perform</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Generate Reminders</strong><br>(Calculate eligible aging & build queue)</td>
+      <td><code>dispatch</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin, Standard User</td>
+    </tr>
+    <tr>
+      <td><strong>Send Reminders / Dispatch Queue</strong><br>(Execute bulk email & WhatsApp dispatch)</td>
+      <td><code>dispatch</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin, Standard User</td>
+    </tr>
+    <tr>
+      <td><strong>Due Database Upload</strong><br>(Upload or replace daily dues ledger)</td>
+      <td><code>due_upload</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin, Standard User</td>
+    </tr>
+    <tr>
+      <td><strong>Master Database Upload</strong><br>(Upload or replace master contact directory)</td>
+      <td><code>master_upload</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin</td>
+    </tr>
+    <tr>
+      <td><strong>Report Generation</strong><br>(Manually trigger daily activity reports)</td>
+      <td><code>report_generation</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin</td>
+    </tr>
+    <tr>
+      <td><strong>Admin Settings Modification</strong><br>(Update rules, templates, CD policies, SMTP)</td>
+      <td><code>admin_settings</code></td>
+      <td><span class="pw-highlight">12345678</span></td>
+      <td>Super Admin, Admin</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>How Super Admin Manages Operation Passwords:</strong><br>
+  1. Navigate to <strong>Admin Panel &rarr; Password Management</strong> (<code>/dashboard/settings/passwords</code>).<br>
+  2. Enter a new 8+ character password for any operation key.<br>
+  3. Click <strong>Save Operation Passwords</strong>.<br>
+  <em>Note: The default password configured for all operational tasks is <span class="pw-highlight">12345678</span>.</em>
+</div>
+
+<hr/>
+
+<h1>4. Master Contact Database Management</h1>
+<p>
+  The Master Contact Database (<code>/dashboard/master</code>) is the central repository of verified dealer contacts. It is managed by Administrators and hidden from standard users.
+</p>
+
+<h2>Expected Excel Header Format</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Header Name</th>
+      <th>Required?</th>
+      <th>Description & Format Examples</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Dealer Code</code> or <code>Customer Code</code></td>
+      <td><strong>Required</strong></td>
+      <td>Unique account code (e.g. <code>ARB-1001</code>, <code>DLR-204</code>, <code>10045</code>).</td>
+    </tr>
+    <tr>
+      <td><code>Company Name</code></td>
+      <td><strong>Required</strong></td>
+      <td>Official registered name of the dealership/firm (e.g. <em>Shiv Shakti Bearings Pvt Ltd</em>).</td>
+    </tr>
+    <tr>
+      <td><code>Contact Person</code> or <code>Primary Contact</code></td>
+      <td>Optional</td>
+      <td>Name of primary proprietor or accounts manager (e.g. <em>Mr. Anil Kumar</em>).</td>
+    </tr>
+    <tr>
+      <td><code>Email</code></td>
+      <td><strong>Required for Email</strong></td>
+      <td>Supports multiple email addresses separated by commas (e.g. <code>accounts@shivbearings.com, anil@shivbearings.com</code>).</td>
+    </tr>
+    <tr>
+      <td><code>WhatsApp</code> or <code>Phone</code></td>
+      <td><strong>Required for WhatsApp</strong></td>
+      <td>10-digit Indian mobile number or E.164 format (e.g. <code>9876543210</code> or <code>+919876543210</code>).</td>
+    </tr>
+    <tr>
+      <td><code>SMS</code></td>
+      <td>Optional</td>
+      <td>Phone number for SMS dispatch.</td>
+    </tr>
+    <tr>
+      <td><code>Salesperson Name</code> / <code>Salesperson Email</code></td>
+      <td>Optional</td>
+      <td>Direct salesperson assignment (can also be mapped via Salesperson Settings).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Uploading & Maintaining Master Records</h2>
+<ol>
+  <li>Log in as an Admin or Super Admin and go to <strong>Master Database</strong> (<code>/dashboard/master</code>).</li>
+  <li>Choose your Excel/CSV file using the file selector.</li>
+  <li>Select <strong>Import Mode</strong>:
+    <ul>
+      <li><code>Replace existing master records</code>: (Recommended) Fully overwrites existing records with the clean new sheet.</li>
+      <li><code>Append to existing master records</code>: Adds new records or updates existing matching dealer codes.</li>
+    </ul>
+  </li>
+  <li>Click <strong>Save master database</strong> (enter Master Upload Password <span class="pw-highlight">12345678</span> if prompted).</li>
+  <li>Review the <strong>Current Contacts</strong> table to verify imported contacts.</li>
+</ol>
+
+<hr/>
+
+<h1>5. Dues Sheet & Invoice Ledger Management</h1>
+<p>
+  The Dues Upload Workspace (<code>/dashboard/dues</code>) is where your operations or accounts team uploads the active outstanding ledger exported from your billing system. Standard users have full access to upload and review dues.
+</p>
+
+<h2>Expected Dues Excel Columns</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Excel Header Name</th>
+      <th>Description & Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Date</code> or <code>Bill Date</code> or <code>Invoice Date</code></td>
+      <td>Date of original invoice issuance (Format: <code>DD/MM/YYYY</code> or <code>YYYY-MM-DD</code>). Used to calculate bill age.</td>
+    </tr>
+    <tr>
+      <td><code>Ref. No.</code> or <code>Invoice Number</code></td>
+      <td>Unique invoice or bill reference number (e.g. <code>ARB/25-26/04812</code>).</td>
+    </tr>
+    <tr>
+      <td><code>Party's Name</code> or <code>Company Name</code></td>
+      <td>Dealer / Firm Name matching Master Database.</td>
+    </tr>
+    <tr>
+      <td><code>Opening Amount</code></td>
+      <td>Original invoice value.</td>
+    </tr>
+    <tr>
+      <td><code>Pending Amount</code> or <code>Amount</code></td>
+      <td>Currently outstanding/unpaid balance on this invoice.</td>
+    </tr>
+    <tr>
+      <td><code>Due on</code> or <code>Due Date</code></td>
+      <td>Contractual payment due date.</td>
+    </tr>
+    <tr>
+      <td><code>Overdue by days</code></td>
+      <td>Number of days past the contractual due date.</td>
+    </tr>
+    <tr>
+      <td><code>Dealer Code</code></td>
+      <td>Optional in dues sheet. If missing, the system matches contacts by <em>Party's Name</em>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Step-by-Step Dues Upload Procedure</h2>
+<ol>
+  <li>Navigate to <strong>Dues Upload Workspace</strong> (<code>/dashboard/dues</code>).</li>
+  <li>Click <strong>Choose File</strong> and select your latest exported ledger file.</li>
+  <li>Ensure <strong>Replace existing dues records</strong> is selected so old cleared bills are removed.</li>
+  <li>Click <strong>Save dues data</strong> (enter Due Upload Password <span class="pw-highlight">12345678</span> if prompted).</li>
+  <li>The system will import all records and perform automatic matching with the Master Contact Database.</li>
+</ol>
+
+<hr/>
+
+<h1>6. Salesperson Configuration & Dealer Mappings</h1>
+<p>
+  The system allows you to organize your dealer network by Salesperson so that sales representatives are automatically notified of their dealers' pending collections.
+</p>
+
+<h2>Configuring Salespersons (Admin Panel &rarr; Salespersons)</h2>
+<p>You can manage salespersons using either manual entry or bulk file upload:</p>
+
+<h3>Method A: Bulk Excel Upload</h3>
+<ol>
+  <li>Go to <code>/dashboard/settings/salespersons</code>.</li>
+  <li>Click <strong>Download sample Excel</strong> to view the format (Employee ID, Name, Email, Phone, Dealer Codes).</li>
+  <li>Select your filled spreadsheet and click <strong>Upload salesperson file</strong>.</li>
+</ol>
+
+<h3>Method B: Manual Entry</h3>
+<ol>
+  <li>In the <strong>Add Salesperson</strong> box:
+    <ul>
+      <li><strong>Name:</strong> Sales executive name (e.g. <em>Vikas Gupta</em>).</li>
+      <li><strong>Employee ID:</strong> Corporate ID (e.g. <em>ARB-EMP-084</em>).</li>
+      <li><strong>Email:</strong> Official email address (e.g. <em>vikas.gupta@arbbearings.com</em>).</li>
+      <li><strong>Phone Number:</strong> Mobile number for WhatsApp delivery (e.g. <code>9811002233</code>).</li>
+      <li><strong>Dealer Codes:</strong> List of assigned dealer codes (enter one code per line or comma-separated, e.g. <code>ARB-1001, ARB-1002, ARB-1050</code>).</li>
+    </ul>
+  </li>
+  <li>Click <strong>Save salesperson</strong> (enter Admin Settings Password <span class="pw-highlight">12345678</span>).</li>
+</ol>
+
+<hr/>
+
+<h1>7. Salesperson Summary Reports & Automated Dispatch</h1>
+<p>
+  Every time a batch of payment reminders is dispatched to dealers, the system automatically compiles and sends comprehensive <strong>Salesperson Summaries</strong>.
+</p>
+
+<h2>What the Salesperson Receives</h2>
+<ol>
+  <li><strong>Email Notification:</strong>
+    <ul>
+      <li>High-level summary cards (Total Dealers Assigned, Total Outstanding Amount, Reminders Sent Today).</li>
+      <li>Breakdown by Aging Bracket (30 Day CD, 45 Day CD, 60 Day, 75 Day, 90 Day, 120+ Day).</li>
+      <li>Itemized dealer-by-dealer tables with invoice numbers, due dates, and individual balances.</li>
+      <li><strong>Branded Salesperson Summary PDF</strong> attached to the email.</li>
+    </ul>
+  </li>
+  <li><strong>WhatsApp Notification:</strong>
+    <ul>
+      <li>Sent to the salesperson's registered phone number via Interakt WhatsApp service.</li>
+      <li>Contains the overall outstanding figure and a direct Google Drive link to view and download their detailed PDF statement.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr/>
+
+<h1>8. Admin Panel Global Settings & Channel Configuration</h1>
+<p>All communication channels, thresholds, and reporting schedules are configured in <strong>Admin Panel &rarr; Email Configuration</strong> (<code>/dashboard/settings/email</code>).</p>
+
+<h2>Configuration Fields & Best Practice Settings</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Setting Field</th>
+      <th>Recommended Value / Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Sender Email / From</strong></td>
+      <td><code>accounts@arbbearings.com</code> or verified SMTP address.</td>
+    </tr>
+    <tr>
+      <td><strong>SMTP Host</strong></td>
+      <td><code>smtp.gmail.com</code> (or your company's exchange server).</td>
+    </tr>
+    <tr>
+      <td><strong>SMTP Port</strong></td>
+      <td><code>587</code> (for STARTTLS) or <code>465</code> (for SSL).</td>
+    </tr>
+    <tr>
+      <td><strong>SMTP Username</strong></td>
+      <td>Full email address (e.g. <code>accounts@arbbearings.com</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>SMTP Password</strong></td>
+      <td>Gmail App Password (16 characters) or SMTP password.</td>
+    </tr>
+    <tr>
+      <td><strong>Secure SMTP</strong></td>
+      <td>Check if using port 465; uncheck for port 587.</td>
+    </tr>
+    <tr>
+      <td><strong>WhatsApp Provider</strong></td>
+      <td><code>Interakt</code></td>
+    </tr>
+    <tr>
+      <td><strong>Global Channels Configuration</strong></td>
+      <td>
+        <input type="checkbox" checked disabled> <strong>Enable Email Dispatches</strong><br>
+        <input type="checkbox" checked disabled> <strong>Enable WhatsApp Dispatches</strong><br>
+        <input type="checkbox" disabled> <strong>Enable SMS Dispatches</strong> (Optional)
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Payment Reminder Threshold Amount</strong></td>
+      <td><code>10000</code> (Minimum total outstanding amount in ₹ required for a dealer to trigger reminders. Prevents spamming for small rounding differences).</td>
+    </tr>
+    <tr>
+      <td><strong>Report Frequency & Time</strong></td>
+      <td>Frequency: <code>Daily</code> | Time: <code>18:00</code> (6:00 PM).</td>
+    </tr>
+    <tr>
+      <td><strong>Report Recipient Emails</strong></td>
+      <td>List of admin/director emails (one per line) who will receive the Daily Activity Report.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr/>
+
+<h1>9. Aging Rules, Cash Discount Policies & Message Templates</h1>
+
+<h2>Aging Buckets & Logic</h2>
+<p>
+  The reminder engine evaluates each dealer's unpaid bills and groups them into 6 non-overlapping stages. Reminders are prioritized from oldest to newest:
+</p>
+<ol>
+  <li><strong>Stage 1: Age &gt; 120 Days:</strong> Invoicing stopped notice. Immediate payment required.</li>
+  <li><strong>Stage 2: Age 91 &ndash; 120 Days:</strong> Critical overdue notice. Supply stoppage warning.</li>
+  <li><strong>Stage 3: Age 61 &ndash; 90 Days:</strong> Overdue notice (>60 days). Request immediate settlement.</li>
+  <li><strong>Stage 4: Age 46 &ndash; 60 Days:</strong> 5 days before due date (nominal 60-day term).</li>
+  <li><strong>Stage 5: Age 40 &ndash; 45 Days (2% Cash Discount):</strong> Early payment discount window.</li>
+  <li><strong>Stage 6: Age 25 &ndash; 30 Days (3% Cash Discount):</strong> Early payment discount window.</li>
+</ol>
+
+<h2>Cash Discount (CD) Intelligent Conditional Text</h2>
+<ul>
+  <li><strong>If No Older Unpaid Bills Exist:</strong><br>
+    <em>"To avail the 3% CD benefit, please remit us the payment by/before the due date."</em>
+  </li>
+  <li><strong>If Older Unpaid Invoices Exist:</strong><br>
+    <em>"To avail the 3% CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date."</em>
+  </li>
+</ul>
+
+<h2>Available Message Template Placeholders</h2>
+<p>You can use any of these tokens in <strong>Admin Panel &rarr; Message Templates</strong> (<code>/dashboard/settings/templates</code>):</p>
+<table>
+  <thead>
+    <tr>
+      <th>Placeholder</th>
+      <th>Replacement Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>{{contactName}}</code></td>
+      <td>Contact person's name or Dealer Company Name.</td>
+    </tr>
+    <tr>
+      <td><code>{{companyName}}</code> / <code>{{dealer_name}}</code></td>
+      <td>Full name of the Dealership.</td>
+    </tr>
+    <tr>
+      <td><code>{{invoiceNumber}}</code> / <code>{{invoice_no}}</code></td>
+      <td>Invoice Reference Number.</td>
+    </tr>
+    <tr>
+      <td><code>{{amount}}</code> / <code>{{invoice_amount}}</code></td>
+      <td>Formatted invoice amount (e.g. <em>₹45,200.00</em>).</td>
+    </tr>
+    <tr>
+      <td><code>{{dueDate}}</code> / <code>{{due_date}}</code></td>
+      <td>Formatted due date (e.g. <em>25 Jun 2026</em>).</td>
+    </tr>
+    <tr>
+      <td><code>{{billAgeDays}}</code></td>
+      <td>Calculated days elapsed since invoice bill date.</td>
+    </tr>
+    <tr>
+      <td><code>{{cdMessage}}</code></td>
+      <td>Full dynamic Cash Discount sentence.</td>
+    </tr>
+    <tr>
+      <td><code>{{previousDueAmount}}</code></td>
+      <td>Total of all other outstanding invoices for this dealer.</td>
+    </tr>
+    <tr>
+      <td><code>{{totalDueAmount}}</code></td>
+      <td>Grand total outstanding balance for this dealer.</td>
+    </tr>
+    <tr>
+      <td><code>{{senderCompany}}</code></td>
+      <td>ARB Bearings Limited.</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr/>
+
+<h1>10. Daily Operational SOP (Standard Operating Procedure)</h1>
+
+<div class="workflow-step">
+  <h3><span class="step-num">1</span>Export Dues Sheet from ERP</h3>
+  <p>Every morning, export the updated Accounts Receivable / Outstanding Ledger from Tally or SAP as an <code>.xlsx</code> file.</p>
+</div>
+
+<div class="workflow-step">
+  <h3><span class="step-num">2</span>Upload Dues Sheet to System</h3>
+  <p>Log in to the web app (as Standard User, Admin, or Super Admin), go to <strong>Dues Upload Workspace</strong> (<code>/dashboard/dues</code>), select your file, ensure <em>Replace existing dues records</em> is selected, and click <strong>Save dues data</strong> (enter PIN <span class="pw-highlight">12345678</span>).</p>
+</div>
+
+<div class="workflow-step">
+  <h3><span class="step-num">3</span>Generate Today's Reminders</h3>
+  <p>In the <strong>Dispatch from dues</strong> section, select today's date (defaults to current date) and click <strong>Generate eligible reminders</strong> (enter PIN <span class="pw-highlight">12345678</span>).</p>
+</div>
+
+<div class="workflow-step">
+  <h3><span class="step-num">4</span>Review Generation Summary</h3>
+  <p>Inspect the <strong>Today Generation Summary</strong> cards and table. Review eligible dealers, calculated aging buckets, CD statuses, and message previews.</p>
+</div>
+
+<div class="workflow-step">
+  <h3><span class="step-num">5</span>Dispatch Reminders</h3>
+  <p>Click <strong>Send generated queue</strong>. Enter the Dispatch Operation Password <span class="pw-highlight">12345678</span>. The system will:</p>
+  <ul>
+    <li>Generate dynamic PDF statements for every invoice.</li>
+    <li>Send customized emails with PDF attachments.</li>
+    <li>Dispatch WhatsApp messages with Google Drive PDF links.</li>
+    <li>Send Salesperson Summaries to sales reps on Email and WhatsApp.</li>
+    <li>Deliver the Daily Activity Report to management.</li>
+  </ul>
+</div>
+
+<div class="workflow-step">
+  <h3><span class="step-num">6</span>Review Logs & Confirm Deliveries</h3>
+  <p>Navigate to <strong>Reminder Logs</strong> (<code>/dashboard/reminder-logs</code>) to verify that reminders show status <span class="badge badge-success">Sent</span>. Investigate any <span class="badge badge-danger">Failed</span> entries.</p>
+</div>
+
+<hr/>
+
+<h1>11. Monitoring, Reminder Logs & Audit Trail</h1>
+
+<h2>Reminder Logs (<code>/dashboard/reminder-logs</code>)</h2>
+<p>
+  The Reminder Logs page provides an immutable audit trail of every communication triggered by the system.
+</p>
+<ul>
+  <li><strong>Filters:</strong> Filter by Status (<code>Sent</code>, <code>Pending</code>, <code>Failed</code>) and Channel (<code>Email</code>, <code>WhatsApp</code>, <code>SMS</code>).</li>
+  <li><strong>Search:</strong> Live search by Dealer Name, Dealer Code, Invoice Number, or Recipient.</li>
+  <li><strong>Details Modal:</strong> Click any log row to inspect exact timestamp, sent message body, subject, failure reasons, and view generated PDF invoices.</li>
+</ul>
+
+<h2>System Logs & Audit Trail (<code>/dashboard/settings/logs</code>)</h2>
+<p>
+  Monitors administrative actions including user logins/logouts, master database uploads, configuration updates, and password changes.
+</p>
+
+<hr/>
+
+<h1>12. Frequently Asked Questions & Troubleshooting</h1>
+
+<h3>Q1: Why did a particular dealer not receive a reminder today?</h3>
+<ul>
+  <li><strong>Check Outstanding Threshold:</strong> If the dealer's total outstanding balance is below the configured threshold (e.g. ₹10,000), reminders are suppressed. You can adjust this in <em>Email Configuration</em>.</li>
+  <li><strong>Check Contact Details:</strong> Ensure the dealer has a valid email address or phone number in the Master Contact Database.</li>
+  <li><strong>Check Invoice Age:</strong> Verify that the invoice bill date falls into one of the active rule windows (e.g. 25–30, 40–45, 50–60, 61–90, 91–120, 120+ days).</li>
+  <li><strong>Check Deduplication:</strong> If a reminder was already generated or sent for this invoice today, the deduplication engine prevents duplicate sending.</li>
+</ul>
+
+<h3>Q2: Email sending failed with "Authentication Failed" or "Connection Timeout".</h3>
+<ul>
+  <li>Verify that your Gmail/SMTP App Password is valid and has not expired.</li>
+  <li>Ensure port <code>587</code> is used for STARTTLS or port <code>465</code> for SSL.</li>
+  <li>Check that the sender email matches your SMTP authenticated user.</li>
+</ul>
+
+<h3>Q3: WhatsApp messages fail to deliver.</h3>
+<ul>
+  <li>Ensure the recipient phone number is 10 digits or E.164 (<code>+91...</code>).</li>
+  <li>Check that your <code>INTERAKT_API_KEY</code> is active and your WhatsApp template is approved in the Interakt dashboard.</li>
+</ul>
+
+<h3>Q4: How do I change an operation password if I forgot it?</h3>
+<ul>
+  <li>A <strong>Super Admin</strong> can go to <code>/dashboard/settings/passwords</code> and enter a new password for that operation at any time.</li>
+</ul>
+
+<hr/>
+
+<div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 9pt;">
+  &copy; ${new Date().getFullYear()} ARB Bearings Limited. All Rights Reserved. Confidential & Proprietary Operational Document.
+</div>
+
+</body>
+</html>
+`;
+
+const outputPath = path.join(__dirname, "..", "Auto-Payment-Reminder-Complete-User-Manual.doc");
+fs.writeFileSync(outputPath, docContent, "utf8");
+console.log("Successfully created at root:", outputPath);

@@ -92,7 +92,7 @@ function ensureAllRulesExist(db: AppDatabase): AppDatabase {
           ownerId,
           ruleId,
           name: `${triggerDay} Day Reminder`,
-          emailSubject: `Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required`,
+          emailSubject: `Invoicing on Hold: Invoice {{invoiceNumber}} — Immediate Attention Required`,
           emailBody: buildMigratedEmailBody(triggerDay),
           whatsappBody: buildMigratedWhatsappBody(triggerDay),
           smsBody: buildMigratedWhatsappBody(triggerDay),
@@ -200,6 +200,7 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             dueDate: toStringValue(record?.dueDate),
             openingAmount: toNumberValue((record as Record<string, unknown>)?.openingAmount),
             amount: toNumberValue(record?.amount),
+            quantity: toNumberValue((record as Record<string, unknown>)?.quantity, 0),
             currency: toStringValue(record?.currency) || "INR",
             overdueDays: toNumberValue((record as Record<string, unknown>)?.overdueDays, 0),
             reference: toStringValue(record?.reference),
@@ -382,7 +383,9 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             invoiceIdsInvolved: Array.isArray(log?.invoiceIdsInvolved) ? log.invoiceIdsInvolved.map(toStringValue) : [],
             relevantAmount: log?.relevantAmount !== undefined ? toNumberValue(log.relevantAmount) : undefined,
             totalOutstanding: log?.totalOutstanding !== undefined ? toNumberValue(log.totalOutstanding) : undefined,
-            thresholdAmount: log?.thresholdAmount !== undefined ? toNumberValue(log.thresholdAmount) : undefined
+            thresholdAmount: log?.thresholdAmount !== undefined ? toNumberValue(log.thresholdAmount) : undefined,
+            cdAmount: log?.cdAmount !== undefined ? toNumberValue(log.cdAmount) : undefined,
+            eligibleAmount: log?.eligibleAmount !== undefined ? toNumberValue(log.eligibleAmount) : undefined
           };
         })
       : []
@@ -509,17 +512,17 @@ function buildMigratedEmailBody(triggerDay: number): string {
         `The payment more than 80 days of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
         footer;
     case 85:
-      return `Dear {{contactName}},\n\nThe payment more than 85 days of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be stopped.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
+      return `Dear {{contactName}},\n\nThe payment more than 85 days of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be put on hold.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
     case 90:
-      return `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain stopped until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain on temporary hold until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 95:
-      return `Dear {{contactName}},\n\nThe payment more than 95 days of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThe payment more than 95 days of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be put on hold, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 100:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 100 days, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 100 days, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 110:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 110 days, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 110 days, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     case 120:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 120 days, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
+      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 120 days, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
     default:
       return ""; // Unknown trigger day — skip migration
   }
@@ -527,8 +530,8 @@ function buildMigratedEmailBody(triggerDay: number): string {
 
 function buildMigratedEmailSubject(triggerDay: number): string {
   if (triggerDay <= 60) return `Outstanding: Payment more than ${triggerDay} days due in 5 days`;
-  if (triggerDay === 90) return `Critical: Payment more than 90 days — Future Invoicing at Risk`;
-  if (triggerDay >= 100 && triggerDay <= 120) return `Invoicing Stopped: Payment more than ${triggerDay} days — Immediate Attention Required`;
+  if (triggerDay === 90) return `Critical: Payment more than 90 days — Future Invoicing on Hold`;
+  if (triggerDay >= 100 && triggerDay <= 120) return `Invoicing on Hold: Payment more than ${triggerDay} days — Immediate Attention Required`;
   return `Overdue: Payment more than ${triggerDay} days — Immediate Attention Required`;
 }
 
@@ -547,15 +550,15 @@ function buildMigratedWhatsappBody(triggerDay: number): string {
     case 85:
       return `Dear {{contactName}}, payment more than 85 days of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
     case 90:
-      return `Dear {{contactName}}, payment of {{amount}} is significantly overdue. Invoicing will remain stopped until paid. — ARB Bearings Limited`;
+      return `Dear {{contactName}}, payment of {{amount}} is significantly overdue. Invoicing will remain on hold until paid. — ARB Bearings Limited`;
     case 95:
-      return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
+      return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be on hold. — ARB Bearings Limited`;
     case 100:
-      return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
+      return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing is on hold. — ARB Bearings Limited`;
     case 110:
-      return `Dear {{contactName}}, payment more than 110 days of Rs. {{amount}} is 105 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 110 days of Rs. {{amount}} is 105 days overdue. Invoicing is on hold. — {{senderCompany}}`;
     case 120:
-      return `Dear {{contactName}}, payment more than 120 days of Rs. {{amount}} is 115 days overdue. Invoicing has been stopped. — {{senderCompany}}`;
+      return `Dear {{contactName}}, payment more than 120 days of Rs. {{amount}} is 115 days overdue. Invoicing is on hold. — {{senderCompany}}`;
     default:
       return ""; // Unknown trigger day — skip migration
   }

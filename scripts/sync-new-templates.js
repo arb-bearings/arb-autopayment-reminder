@@ -45,13 +45,13 @@ async function main() {
       },
       {
         names: ['90 Day Reminder', '90 Day', '90-Day Reminder', '90+ Day Reminder', '90+ Day'],
-        emailBody: `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain stopped until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`,
-        whatsappBody: `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain stopped until cleared. Please arrange payment at earliest. — ARB Bearings Limited`
+        emailBody: `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain on temporary hold until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`,
+        whatsappBody: `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain on hold until cleared. Please arrange payment at earliest. — ARB Bearings Limited`
       },
       {
         names: ['120 Day Reminder', '120 Day', '120-Day Reminder', '120+ Day Reminder', '120+ Day'],
-        emailBody: `Dear {{contactName}},\n\nThis is to remind you that the payment of {{amount}} is now significantly overdue and has exceeded 120 days.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`,
-        whatsappBody: `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing has been stopped. Kindly clear immediately. — ARB Bearings Limited`
+        emailBody: `Dear {{contactName}},\n\nThis is to remind you that the payment of {{amount}} is now significantly overdue and has exceeded 120 days.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`,
+        whatsappBody: `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing is on hold. Kindly clear immediately. — ARB Bearings Limited`
       }
     ];
 

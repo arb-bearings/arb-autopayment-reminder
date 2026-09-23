@@ -357,6 +357,7 @@ export function GroupedDuesTable({
                             {canDispatch && <th style={{ width: "40px" }}>Select</th>}
                             <th>Date</th>
                             <th>Reference No.</th>
+                            {group.invoices.some(inv => Boolean(inv.quantity)) && <th>Qty</th>}
                             <th>Due on</th>
                             <th>Age</th>
                             <th>Overdue by</th>
@@ -370,6 +371,7 @@ export function GroupedDuesTable({
                           {group.invoices.map((inv) => {
                             const isSendable = findMatchingMasterContact(inv, masterContacts);
                             const isSelected = selectedIds.has(inv.id);
+                            const showQty = group.invoices.some(i => Boolean(i.quantity));
 
                             return (
                               <tr key={inv.id}>
@@ -391,6 +393,7 @@ export function GroupedDuesTable({
                                 )}
                                 <td>{formatDate(inv.billDate || inv.invoiceDate)}</td>
                                 <td>{inv.invoiceNumber || inv.reference || "N/A"}</td>
+                                {showQty && <td>{inv.quantity || "-"}</td>}
                                 <td>{formatDate(inv.dueDate)}</td>
                                 <td>{formatElapsedDaysTag(inv.billDate || inv.invoiceDate)}</td>
                                 <td>
