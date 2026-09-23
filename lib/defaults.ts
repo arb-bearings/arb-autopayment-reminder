@@ -37,9 +37,7 @@ const defaultCashDiscountBlueprints = [
 function buildBody30() {
   return `Dear {{contactName}},
 
-Please note that a payment of {{amount}} is due within the next 5 days to avail the 3% CD benefit on the invoice.
-
-To avail the 3% CD, please ensure that the payment is made before the invoice completes 30 days.
+{{cdMessage}}
 
 Thank you for your attention in the matter.
 
@@ -53,9 +51,7 @@ function buildBody35() {
 
 Dear {{contactName}},
 
-Please note that a payment of {{amount}} is due within the next 5 days to avail the 3% CD benefit on the invoice.
-
-To avail the 3% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.
+{{cdMessage}}
 
 Thank you for your attention in the matter.
 
@@ -67,9 +63,7 @@ ARB Bearings Limited`;
 function buildBody45() {
   return `Dear {{contactName}},
 
-Please note that a payment of {{amount}} is due within the next 5 days to avail the 2% CD benefit on the invoice.
-
-To avail the 2% CD, please ensure that the payment is made before the invoice completes 45 days.
+{{cdMessage}}
 
 Thank you for your attention in the matter.
 
@@ -83,9 +77,7 @@ function buildBody50() {
 
 Dear {{contactName}},
 
-Please note that a payment of {{amount}} is due within the next 5 days to avail the 2% CD benefit on the invoice.
-
-To avail the 2% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.
+{{cdMessage}}
 
 Thank you for your attention in the matter.
 
@@ -159,7 +151,7 @@ function buildBody90() {
 
 Please note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.
 
-As per our company policy, invoicing will remain stopped until the outstanding payment is cleared.
+As per our company policy, invoicing will remain on temporary hold until the outstanding payment is cleared.
 
 We kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.
 
@@ -174,7 +166,7 @@ function buildBody95() {
 
 The payment more than 95 days of amount Rs. {{amount}} is now 90 days overdue. 
 
-As per our company policy, your invoicing will be stopped, if the outstanding payment has not been cleared within the 90-day credit period.
+As per our company policy, your invoicing will be put on hold, if the outstanding payment has not been cleared within the 90-day credit period.
 
 So please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.
 
@@ -189,7 +181,7 @@ function buildBody100() {
 
 This is to remind you that the payment more than 100 days, amounting to Rs. {{amount}}, is now 95 days overdue.
 
-Your invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.
+Your invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.
 
 Thank you for your attention in the matter.
 
@@ -197,13 +189,13 @@ Regards,
 ARB Bearings Limited`;
 }
 
-/** 120-day / 120+ day: invoicing stopped, clear immediately */
+/** 120-day / 120+ day: invoicing on hold, clear immediately */
 function buildBody120() {
   return `Dear {{contactName}},
 
 This is to remind you that the payment of {{amount}} is now significantly overdue and has exceeded 120 days.
 
-Your invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.
+Your invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.
 
 Thank you for your attention in the matter.
 
@@ -214,19 +206,19 @@ ARB Bearings Limited`;
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
 
 function buildWhatsapp30() {
-  return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 3% CD. Ensure payment before 30 days. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
 }
 
 function buildWhatsapp35() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Final Reminder To Avail 3% CD. Payment of {{amount}} is due in 5 days. To avail the 3% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date. — ARB Bearings Limited`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
 }
 
 function buildWhatsapp45() {
-  return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 2% CD. Ensure payment before 45 days. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
 }
 
 function buildWhatsapp50() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, Final Reminder To Avail 2% CD. Payment of {{amount}} is due in 5 days. To avail the 2% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date. — ARB Bearings Limited`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
 }
 
 function buildWhatsapp60() {
@@ -246,19 +238,19 @@ function buildWhatsapp85() {
 }
 
 function buildWhatsapp90() {
-  return `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain stopped until cleared. Please arrange payment at earliest. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain on hold until cleared. Please arrange payment at earliest. — ARB Bearings Limited`;
 }
 
 function buildWhatsapp95() {
-  return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be stopped. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be on hold. — ARB Bearings Limited`;
 }
 
 function buildWhatsapp100() {
-  return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing has been stopped. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing is on hold. — ARB Bearings Limited`;
 }
 
 function buildWhatsapp120() {
-  return `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing has been stopped. Kindly clear immediately. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing is on hold. Kindly clear immediately. — ARB Bearings Limited`;
 }
 
 // ─── Subject Lines ────────────────────────────────────────────────────────────
@@ -268,10 +260,10 @@ function buildSubject(triggerDay: number) {
     return `Outstanding: Payment more than ${triggerDay} days due in 5 days`;
   }
   if (triggerDay === 90) {
-    return `Critical: Payment more than 90 days — Future Invoicing at Risk`;
+    return `Critical: Payment more than 90 days — Future Invoicing on Hold`;
   }
   if (triggerDay >= 100 && triggerDay <= 120) {
-    return `Invoicing Stopped: Payment more than ${triggerDay} days — Immediate Attention Required`;
+    return `Invoicing on Hold: Payment more than ${triggerDay} days — Immediate Attention Required`;
   }
   return `Overdue: Payment more than ${triggerDay} days — Immediate Attention Required`;
 }
@@ -366,10 +358,10 @@ export function createDefaultRuleSet(ownerId: string) {
     discountPercent: policy.discountPercent,
     enabled: true,
     description: `Customer remains eligible for ${policy.discountPercent}% cash discount when payment is cleared within ${policy.paymentWindowDays} days and no older unpaid invoices exist.`,
-    cdMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-    cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-    cdShortMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-    cdShortMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+    cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
+    cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
+    cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD. Ensure payment before {{paymentWindowDays}} days.",
+    cdShortMessageWithOlderTemplate: "To avail {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days.",
     createdAt: generatedAt,
     updatedAt: generatedAt
   }));

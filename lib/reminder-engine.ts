@@ -53,6 +53,9 @@ type CashDiscountEvaluation = {
   policy: CashDiscountPolicy | null;
   reason: string;
   hasOlderUnpaid: boolean;
+  cdAmount?: number;
+  eligibleAmount?: number;
+  currency?: string;
 };
 
 type PaymentSummary = {
@@ -89,7 +92,7 @@ export function calculateRuleOutstanding(dues: DueRecord[], ruleTriggerDay: numb
     } else if (ruleTriggerDay === 45) {
       inBucket = (age >= 40 && age <= 45);
     } else if (ruleTriggerDay === 60) {
-      inBucket = (age > 50 && age <= 60);
+      inBucket = (age > 45 && age <= 60);
     } else if (ruleTriggerDay === 75) {
       inBucket = (age > 60 && age <= 90);
     } else if (ruleTriggerDay === 90) {
@@ -131,35 +134,61 @@ function buildReminderDedupeKey(
 }
 
 /**
- * Returns the CD discount percentage string (e.g. "3%" or "2%") when the
- * customer is eligible with NO older unpaid invoices, otherwise "".
- * 30-day policy → "3%", 45-day policy → "2%".
+ * Returns formatted CD amount string (e.g. "₹8,190.39") if eligible, else "".
  */
-function buildCdAmount(evaluation: CashDiscountEvaluation): string {
-  if (!evaluation.eligible || !evaluation.policy || evaluation.hasOlderUnpaid) {
+function buildCdAmount(evaluation: CashDiscountEvaluation, currency = "INR"): string {
+  if (!evaluation.eligible || evaluation.cdAmount === undefined) {
     return "";
   }
-  return `${evaluation.policy.discountPercent}%`;
+  return formatCurrency(evaluation.cdAmount, currency);
+}
+
+/**
+ * Returns formatted Eligible Amount string (older + CD bucket dues) if eligible, else "".
+ */
+function buildEligibleAmount(evaluation: CashDiscountEvaluation, currency = "INR"): string {
+  if (!evaluation.eligible || evaluation.eligibleAmount === undefined) {
+    return "";
+  }
+  return formatCurrency(evaluation.eligibleAmount, currency);
 }
 
 /**
  * Returns the full CD sentence based on eligibility and whether older unpaid
  * invoices exist. Returns "" when the bill is outside every CD window.
  *
- * No older unpaid:  "To avail the X% CD benefit, please remit us the payment by/before the due date."
- * Has older unpaid: "To avail the X% CD benefit on this invoice, please arrange to remit us
- *                    the payment of your all older unpaid invoices along with the current
- *                    invoice by/before the due date."
+ * No older unpaid:  "Please note that a payment of ₹8,190.39 is due within the next 2 days to avail the 2% CD benefit on the invoice.
+ *                    To avail the 2% CD, please ensure that the payment is made before the invoice completes 45 days."
+ * Has older unpaid: "To avail the 2% CD on ₹8,190.39, please clear ₹21,002.07 before the invoice completes 45 days to ensure that the payment is eligible for cash discount."
  */
-function buildCdMessage(evaluation: CashDiscountEvaluation): string {
+function buildCdMessage(evaluation: CashDiscountEvaluation, currency = "INR", daysBeforeDue = 5): string {
   if (!evaluation.eligible || !evaluation.policy) {
     return "";
   }
   const pct = `${evaluation.policy.discountPercent}%`;
+  const cdAmt = evaluation.cdAmount !== undefined ? formatCurrency(evaluation.cdAmount, currency) : "";
+  const eligAmt = evaluation.eligibleAmount !== undefined ? formatCurrency(evaluation.eligibleAmount, currency) : cdAmt;
+  const windowDays = evaluation.policy.paymentWindowDays;
+
   if (evaluation.hasOlderUnpaid) {
-    return `To avail the ${pct} CD benefit on this invoice, please arrange to remit us the payment of your all older unpaid invoices along with the current invoice by/before the due date.`;
+    return `To avail the ${pct} CD on ${cdAmt || "this invoice"}, please clear ${eligAmt} before the invoice completes ${windowDays} days to ensure that the payment is eligible for cash discount.`;
   }
-  return `To avail the ${pct} CD benefit, please remit us the payment by/before the due date.`;
+  return `Please note that a payment of ${cdAmt} is due within the next ${daysBeforeDue} days to avail the ${pct} CD benefit on the invoice.\n\nTo avail the ${pct} CD, please ensure that the payment is made before the invoice completes ${windowDays} days.`;
+}
+
+function buildCdShortMessage(evaluation: CashDiscountEvaluation, currency = "INR", daysBeforeDue = 5): string {
+  if (!evaluation.eligible || !evaluation.policy) {
+    return "";
+  }
+  const pct = `${evaluation.policy.discountPercent}%`;
+  const cdAmt = evaluation.cdAmount !== undefined ? formatCurrency(evaluation.cdAmount, currency) : "";
+  const eligAmt = evaluation.eligibleAmount !== undefined ? formatCurrency(evaluation.eligibleAmount, currency) : cdAmt;
+  const windowDays = evaluation.policy.paymentWindowDays;
+
+  if (evaluation.hasOlderUnpaid) {
+    return `To avail ${pct} CD on ${cdAmt || "invoice"}, please clear ${eligAmt} before invoice completes ${windowDays} days.`;
+  }
+  return `Payment of ${cdAmt} is due in ${daysBeforeDue} days to avail ${pct} CD. Ensure payment before ${windowDays} days.`;
 }
 
 function getOlderUnpaidDues(due: DueRecord, allDuesForDealer: DueRecord[]) {
@@ -210,16 +239,36 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
   const totalDueAmount = formatCurrency(context.paymentSummary.totalDue, context.due.currency);
   const invoiceNumber = context.due.invoiceNumber || context.due.reference || "N/A";
   const dueDate = context.due.dueDate ? formatDate(context.due.dueDate) : "Not available";
+  const daysBeforeDue = calculateDynamicDays(context.billAgeDays, context.rule.triggerDay);
+  const currency = context.due.currency || "INR";
+
+  const cdAmountStr = context.cdEvaluation.cdAmount !== undefined
+    ? formatCurrency(context.cdEvaluation.cdAmount, currency)
+    : invoiceAmount;
+  const eligibleAmountStr = context.cdEvaluation.eligibleAmount !== undefined
+    ? formatCurrency(context.cdEvaluation.eligibleAmount, currency)
+    : invoiceAmount;
+  const cdDiscountPercentStr = context.cdEvaluation.policy
+    ? `${context.cdEvaluation.policy.discountPercent}%`
+    : (context.rule.triggerDay === 30 ? "3%" : context.rule.triggerDay === 45 ? "2%" : "");
+  const paymentWindowDaysVal = context.cdEvaluation.policy?.paymentWindowDays ?? context.rule.triggerDay;
 
   return {
     amount: invoiceAmount,
     billAgeDays: context.billAgeDays,
     billDate: formatDate(billDate),
     companyBillKey: getDuePartyKey(context.due),
-    // cdAmount: "3%" / "2%" if eligible with NO older unpaid invoices, else ""
-    cdAmount: buildCdAmount(context.cdEvaluation),
-    // cdMessage: full CD sentence (handles both older-unpaid and clean cases), else ""
-    cdMessage: buildCdMessage(context.cdEvaluation),
+    cdAmount: cdAmountStr,
+    cd_amount: cdAmountStr,
+    eligibleAmount: eligibleAmountStr,
+    eligible_amount: eligibleAmountStr,
+    cdDiscountPercent: cdDiscountPercentStr,
+    cd_discount_percent: cdDiscountPercentStr,
+    paymentWindowDays: paymentWindowDaysVal,
+    cdPolicyWindowDays: paymentWindowDaysVal,
+    cdMessage: buildCdMessage(context.cdEvaluation, currency, daysBeforeDue),
+    cdShortMessage: buildCdShortMessage(context.cdEvaluation, currency, daysBeforeDue),
+    cdReason: context.cdEvaluation.reason,
     companyName: context.due.companyName,
     company_name: context.due.companyName,
     contactName:
@@ -228,7 +277,8 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
         : (context.due.companyName || "Accounts Team"),
     currentInvoiceDueAmount,
     current_invoice_due_amount: currentInvoiceDueAmount,
-    daysBeforeDue: context.rule.triggerDay,
+    daysBeforeDue,
+    days_before_due: daysBeforeDue,
     dealer_name: context.due.companyName,
     dealerCode: context.due.dealerCode || context.due.customerCode || "",
     dueDate,
@@ -737,35 +787,15 @@ export function evaluateCashDiscountEligibility(
     };
   }
 
-  const olderBills = allDuesForDealer
-    .filter((entry) => entry.id !== due.id)
-    .filter((entry) => {
-      const otherBillDate = new Date(entry.billDate || entry.invoiceDate || "");
-      const currentBillDate = new Date(due.billDate || due.invoiceDate || "");
-
-      return (
-        !Number.isNaN(otherBillDate.getTime()) &&
-        !Number.isNaN(currentBillDate.getTime()) &&
-        otherBillDate.getTime() < currentBillDate.getTime()
-      );
-    })
-    .sort((left, right) => (left.billDate || left.invoiceDate).localeCompare(right.billDate || right.invoiceDate));
-
-  const olderUnpaidBills = olderBills
-    .filter((entry) => entry.amount > 0)
-    .sort((left, right) => (left.billDate || left.invoiceDate).localeCompare(right.billDate || right.invoiceDate));
-
-  const hasOlderUnpaid = olderUnpaidBills.length > 0;
-
-  // New logic: Grace-period ranges for CD eligibility
+  // Grace-period ranges for CD eligibility
   let eligiblePolicy: CashDiscountPolicy | null = null;
   let discountPercent = 0;
   let paymentWindowDays = 0;
 
-  if (billAgeDays >= 25 && billAgeDays <= 30) {
+  if (ruleTriggerDay === 30 || (billAgeDays >= 25 && billAgeDays <= 30)) {
     discountPercent = 3;
     paymentWindowDays = 30;
-  } else if (billAgeDays >= 40 && billAgeDays <= 45) {
+  } else if (ruleTriggerDay === 45 || (billAgeDays >= 40 && billAgeDays <= 45)) {
     discountPercent = 2;
     paymentWindowDays = 45;
   }
@@ -787,13 +817,71 @@ export function evaluateCashDiscountEligibility(
     };
   }
 
+  const olderBills = allDuesForDealer
+    .filter((entry) => entry.id !== due.id)
+    .filter((entry) => {
+      const otherBillDate = new Date(entry.billDate || entry.invoiceDate || "");
+      const currentBillDate = new Date(due.billDate || due.invoiceDate || "");
+
+      return (
+        !Number.isNaN(otherBillDate.getTime()) &&
+        !Number.isNaN(currentBillDate.getTime()) &&
+        otherBillDate.getTime() < currentBillDate.getTime()
+      );
+    })
+    .sort((left, right) => (left.billDate || left.invoiceDate).localeCompare(right.billDate || right.invoiceDate));
+
+  const olderUnpaidBills = olderBills
+    .filter((entry) => entry.amount > 0)
+    .sort((left, right) => (left.billDate || left.invoiceDate).localeCompare(right.billDate || right.invoiceDate));
+
+  // Invoices falling inside the CD window
+  const cdBucketDues = allDuesForDealer.filter((entry) => {
+    if (!(entry.amount > 0)) return false;
+    const age = getBillAgeDays(entry.billDate || entry.invoiceDate, referenceDate);
+    if (age === null) return false;
+    if (paymentWindowDays === 30) return age >= 25 && age <= 30;
+    if (paymentWindowDays === 45) return age >= 40 && age <= 45;
+    return entry.id === due.id;
+  });
+
+  const cdAmount = cdBucketDues.length > 0
+    ? cdBucketDues.reduce((sum, entry) => sum + (entry.amount || 0), 0)
+    : (due.amount || 0);
+
+  // Determine earliest invoice date in the CD bucket
+  const earliestCdTimestamp = cdBucketDues.reduce((earliest, entry) => {
+    const d = new Date(entry.billDate || entry.invoiceDate || "");
+    const time = !Number.isNaN(d.getTime()) ? d.getTime() : Infinity;
+    return time < earliest ? time : earliest;
+  }, Infinity);
+
+  // Invoices older than the CD bucket
+  const olderUnpaidThanCd = allDuesForDealer.filter((entry) => {
+    if (!(entry.amount > 0) || cdBucketDues.some((cd) => cd.id === entry.id)) return false;
+    const otherDate = new Date(entry.billDate || entry.invoiceDate || "");
+    if (Number.isNaN(otherDate.getTime())) return false;
+    if (earliestCdTimestamp !== Infinity) {
+      return otherDate.getTime() < earliestCdTimestamp;
+    }
+    return false;
+  });
+
+  const hasOlderUnpaid = olderUnpaidThanCd.length > 0 || olderUnpaidBills.length > 0;
+  const olderTotal = olderUnpaidThanCd.length > 0
+    ? olderUnpaidThanCd.reduce((sum, entry) => sum + (entry.amount || 0), 0)
+    : olderUnpaidBills.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const eligibleAmount = cdAmount + olderTotal;
+
   if (!eligiblePolicy) {
     return {
       eligible: false,
       firstBill: olderBills.length === 0,
       policy: null,
       reason: "Bill age is outside every configured cash discount window.",
-      hasOlderUnpaid
+      hasOlderUnpaid,
+      cdAmount,
+      eligibleAmount
     };
   }
 
@@ -801,8 +889,7 @@ export function evaluateCashDiscountEligibility(
 
   let reason = "";
   if (hasOlderUnpaid) {
-    const oldestPending = olderUnpaidBills[0];
-    reason = `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy if older unpaid invoice ${oldestPending.invoiceNumber || oldestPending.reference || "N/A"} is also cleared.`;
+    reason = `Eligible for ${eligiblePolicy.discountPercent}% CD on ${formatCurrency(cdAmount, due.currency || "INR")} if total accumulated balance of ${formatCurrency(eligibleAmount, due.currency || "INR")} is cleared within ${eligiblePolicy.paymentWindowDays} days.`;
   } else {
     reason = firstBill
       ? `Eligible for ${eligiblePolicy.discountPercent}% CD under the ${eligiblePolicy.paymentWindowDays}-day policy because this is the first active bill on record.`
@@ -814,7 +901,9 @@ export function evaluateCashDiscountEligibility(
     firstBill,
     policy: eligiblePolicy,
     reason,
-    hasOlderUnpaid
+    hasOlderUnpaid,
+    cdAmount,
+    eligibleAmount
   };
 }
 
@@ -955,7 +1044,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       const bucket1: DueRecord[] = []; // Age > 120
       const bucket2: DueRecord[] = []; // Age > 90 and <= 120
       const bucket3: DueRecord[] = []; // Age > 60 and <= 90
-      const bucket4: DueRecord[] = []; // Age > 50 and <= 60
+      const bucket4: DueRecord[] = []; // Age > 45 and <= 60
       const bucket5: DueRecord[] = []; // Age >= 40 and <= 45 (2% CD)
       const bucket6: DueRecord[] = []; // Age >= 25 and <= 30 (3% CD)
 
@@ -967,7 +1056,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           bucket2.push(item.inv);
         } else if (age > 60 && age <= 90) {
           bucket3.push(item.inv);
-        } else if (age > 50 && age <= 60) {
+        } else if (age > 45 && age <= 60) {
           bucket4.push(item.inv);
         } else if (age >= 40 && age <= 45) {
           bucket5.push(item.inv);
@@ -989,64 +1078,78 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       let accumulated = 0;
       let relevantAmount = 0;
       let selectedInvoices: DueRecord[] = [];
+      let triggeringBucketInvoices: DueRecord[] = [];
+      const accumulatedInvoices: DueRecord[] = [];
 
       // Check Stage 1 (120+)
       if (bucket1.length > 0) {
         accumulated += sum1;
+        accumulatedInvoices.push(...bucket1);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 1;
-          relevantAmount = sum1;
-          selectedInvoices = bucket1;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket1;
         }
       }
 
       // Check Stage 2 (90–120)
       if (selectedStageNum === 0 && bucket2.length > 0) {
         accumulated += sum2;
+        accumulatedInvoices.push(...bucket2);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 2;
-          relevantAmount = sum2;
-          selectedInvoices = bucket2;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket2;
         }
       }
 
       // Check Stage 3 (60–90)
       if (selectedStageNum === 0 && bucket3.length > 0) {
         accumulated += sum3;
+        accumulatedInvoices.push(...bucket3);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 3;
-          relevantAmount = sum3;
-          selectedInvoices = bucket3;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket3;
         }
       }
 
       // Check Stage 4 (50–60)
       if (selectedStageNum === 0 && bucket4.length > 0) {
         accumulated += sum4;
+        accumulatedInvoices.push(...bucket4);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 4;
-          relevantAmount = sum4;
-          selectedInvoices = bucket4;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket4;
         }
       }
 
       // Check Stage 5 (2% CD)
       if (selectedStageNum === 0 && bucket5.length > 0) {
         accumulated += sum5;
+        accumulatedInvoices.push(...bucket5);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 5;
-          relevantAmount = sum5;
-          selectedInvoices = bucket5;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket5;
         }
       }
 
       // Check Stage 6 (3% CD)
       if (selectedStageNum === 0 && bucket6.length > 0) {
         accumulated += sum6;
+        accumulatedInvoices.push(...bucket6);
         if (accumulated >= thresholdAmount) {
           selectedStageNum = 6;
-          relevantAmount = sum6;
-          selectedInvoices = bucket6;
+          relevantAmount = accumulated;
+          selectedInvoices = [...accumulatedInvoices];
+          triggeringBucketInvoices = bucket6;
         }
       }
 
@@ -1132,13 +1235,13 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         continue;
       }
 
-      // Determine oldest invoice in the selected bucket for wording/age calculations
-      const sortedSelectedInvoices = [...selectedInvoices].sort((a, b) => {
+      // Determine oldest invoice in the triggering bucket for wording/age calculations
+      const sortedTriggeringInvoices = [...triggeringBucketInvoices].sort((a, b) => {
         const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
         const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
         return ageB - ageA; // oldest first
       });
-      const oldestSelectedDue = sortedSelectedInvoices[0];
+      const oldestSelectedDue = sortedTriggeringInvoices[0];
       const oldestSelectedDueAge = getBillAgeDays(oldestSelectedDue.billDate || oldestSelectedDue.invoiceDate, today) || 0;
 
       // Evaluate Cash Discount eligibility using the oldest invoice in the selected stage
@@ -1149,6 +1252,16 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         today,
         rule.triggerDay
       );
+
+      if (selectedStageNum === 5 || selectedStageNum === 6) {
+        const cdInvoices = triggeringBucketInvoices;
+        const cdAmount = cdInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+        const eligibleAmount = accumulated;
+        cdEvaluation.cdAmount = cdAmount;
+        cdEvaluation.eligibleAmount = eligibleAmount;
+        cdEvaluation.hasOlderUnpaid = selectedInvoices.length > cdInvoices.length;
+        cdEvaluation.currency = oldestSelectedDue.currency;
+      }
 
       const template = templates.find((entry) => entry.id === rule.templateId);
       if (!template) {
@@ -1170,48 +1283,30 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       const daysBeforeDueVal = calculateDynamicDays(oldestSelectedDueAge, rule.triggerDay);
 
       // Build custom Replacements
-      const invoiceAmount = formatCurrency(relevantAmount, oldestSelectedDue.currency);
-      const currentInvoiceDueAmount = formatCurrency(relevantAmount, oldestSelectedDue.currency);
-      const previousDueAmount = formatCurrency(customPaymentSummary.previousDue, oldestSelectedDue.currency);
-      const totalDueAmount = formatCurrency(totalOutstanding, oldestSelectedDue.currency);
-      const invoiceNumber = selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", ");
-      const dueDate = oldestSelectedDue.dueDate ? formatDate(oldestSelectedDue.dueDate) : "Not available";
-
-      const replacements = {
-        amount: invoiceAmount,
-        billAgeDays: oldestSelectedDueAge,
-        billDate: formatDate(oldestSelectedDue.billDate || oldestSelectedDue.invoiceDate),
-        companyBillKey: getDuePartyKey(oldestSelectedDue),
-        cdAmount: buildCdAmount(cdEvaluation),
-        cdMessage: buildCdMessage(cdEvaluation),
-        companyName: oldestSelectedDue.companyName,
-        company_name: oldestSelectedDue.companyName,
-        contactName:
-          (contact.primaryContact && contact.primaryContact !== "Accounts Team")
-            ? contact.primaryContact
-            : (oldestSelectedDue.companyName || "Accounts Team"),
-        currentInvoiceDueAmount,
-        current_invoice_due_amount: currentInvoiceDueAmount,
-        daysBeforeDue: daysBeforeDueVal,
-        dealer_name: oldestSelectedDue.companyName,
-        dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode,
-        dueDate,
-        due_date: dueDate,
-        invoiceAmount,
-        invoice_amount: invoiceAmount,
-        invoiceNumber,
-        invoice_no: invoiceNumber,
-        openingAmount: formatCurrency(oldestSelectedDue.openingAmount, oldestSelectedDue.currency),
-        overdueDays: Math.max(0, oldestSelectedDueAge - 60),
-        previousDueAmount,
-        previous_due_amount: previousDueAmount,
-        pendingAmount: invoiceAmount,
-        reference: invoiceNumber,
-        reminderDay: rule.triggerDay,
-        senderCompany: user?.companyName || "ARB Bearings Limited",
-        totalDueAmount,
-        total_due_amount: totalDueAmount
-      };
+      const replacements = buildReplacements(
+        {
+          due: oldestSelectedDue,
+          contact: contact || {
+            id: "",
+            ownerId: workspace.workspaceId,
+            dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+            companyName: oldestSelectedDue.companyName,
+            primaryContact: oldestSelectedDue.matchedContactName || oldestSelectedDue.companyName || "Accounts Team",
+            email: oldestSelectedDue.matchedEmail || "",
+            whatsapp: oldestSelectedDue.matchedWhatsapp || "",
+            sms: oldestSelectedDue.matchedSms || "",
+            alternateContact: "",
+            notes: "",
+            importedAt: ""
+          },
+          rule,
+          template,
+          cdEvaluation,
+          billAgeDays: oldestSelectedDueAge,
+          paymentSummary: customPaymentSummary
+        },
+        user?.companyName || "ARB Bearings Limited"
+      );
 
       let effectiveTemplate = template;
       if (rule.triggerDay === 30 && oldestSelectedDueAge > 30) {
@@ -1258,6 +1353,8 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             cdPolicyId: cdEvaluation.policy?.id || "",
             cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
             cdReason: cdEvaluation.reason,
+            cdAmount: cdEvaluation.cdAmount,
+            eligibleAmount: cdEvaluation.eligibleAmount,
             channel,
             recipient: "No master contact",
             scheduledFor,
@@ -1310,6 +1407,8 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             cdPolicyId: cdEvaluation.policy?.id || "",
             cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
             cdReason: cdEvaluation.reason,
+            cdAmount: cdEvaluation.cdAmount,
+            eligibleAmount: cdEvaluation.eligibleAmount,
             channel,
             recipient: `Missing ${channel} contact details`,
             scheduledFor,
@@ -1345,10 +1444,10 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         // Dynamically replace any mentions of "5 days" or "5 day" in subject or content for rules 30, 45, and 60
         if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
           const replacementText = `${daysBeforeDueVal} days`;
-          subject = subject.replace(/5\s+days?/gi, replacementText);
-          content = content.replace(/5\s+days?/gi, replacementText);
-          subject = subject.replace(/5-day/gi, `${daysBeforeDueVal}-day`).replace(/5\s+day/gi, `${daysBeforeDueVal} day`);
-          content = content.replace(/5-day/gi, `${daysBeforeDueVal}-day`).replace(/5\s+day/gi, `${daysBeforeDueVal} day`);
+          subject = subject.replace(/\b5\s+days?\b/gi, replacementText);
+          content = content.replace(/\b5\s+days?\b/gi, replacementText);
+          subject = subject.replace(/\b5-day\b/gi, `${daysBeforeDueVal}-day`).replace(/\b5\s+day\b/gi, `${daysBeforeDueVal} day`);
+          content = content.replace(/\b5-day\b/gi, `${daysBeforeDueVal}-day`).replace(/\b5\s+day\b/gi, `${daysBeforeDueVal} day`);
         }
 
         created.push({
@@ -1367,6 +1466,8 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           cdPolicyId: cdEvaluation.policy?.id || "",
           cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
           cdReason: cdEvaluation.reason,
+          cdAmount: cdEvaluation.cdAmount,
+          eligibleAmount: cdEvaluation.eligibleAmount,
           channel,
           recipient,
           scheduledFor,
@@ -1515,10 +1616,10 @@ export async function createManualRemindersForDue(
       if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
         const daysVal = calculateDynamicDays(billAgeDays, rule.triggerDay);
         const replacementText = `${daysVal} days`;
-        subject = subject.replace(/5\s+days?/gi, replacementText);
-        content = content.replace(/5\s+days?/gi, replacementText);
-        subject = subject.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
-        content = content.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
+        subject = subject.replace(/\b5\s+days?\b/gi, replacementText);
+        content = content.replace(/\b5\s+days?\b/gi, replacementText);
+        subject = subject.replace(/\b5-day\b/gi, `${daysVal}-day`).replace(/\b5\s+day\b/gi, `${daysVal} day`);
+        content = content.replace(/\b5-day\b/gi, `${daysVal}-day`).replace(/\b5\s+day\b/gi, `${daysVal} day`);
       }
 
       created.push({
@@ -1537,6 +1638,8 @@ export async function createManualRemindersForDue(
         cdPolicyId: cdEvaluation.policy?.id || "",
         cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? (rule.triggerDay === 30 ? 3 : rule.triggerDay === 45 ? 2 : 0),
         cdReason: cdEvaluation.reason,
+        cdAmount: cdEvaluation.cdAmount,
+        eligibleAmount: cdEvaluation.eligibleAmount,
         channel,
         recipient,
         scheduledFor,
@@ -1771,6 +1874,12 @@ export async function getEmailContentForLog(
     new Date(),
     rule.triggerDay
   );
+  if (log.cdAmount !== undefined) {
+    cdEvaluation.cdAmount = log.cdAmount;
+  }
+  if (log.eligibleAmount !== undefined) {
+    cdEvaluation.eligibleAmount = log.eligibleAmount;
+  }
 
   // Find sender company name from workspace users
   const workspaceUser = database.users.find((u: any) => u.companyName);
@@ -1792,8 +1901,8 @@ export async function getEmailContentForLog(
   if (rule.triggerDay === 30 || rule.triggerDay === 45 || rule.triggerDay === 60) {
     const daysVal = calculateDynamicDays(log.billAgeDays || 0, rule.triggerDay);
     const replacementText = `${daysVal} days`;
-    filled = filled.replace(/5\s+days?/gi, replacementText);
-    filled = filled.replace(/5-day/gi, `${daysVal}-day`).replace(/5\s+day/gi, `${daysVal} day`);
+    filled = filled.replace(/\b5\s+days?\b/gi, replacementText);
+    filled = filled.replace(/\b5-day\b/gi, `${daysVal}-day`).replace(/\b5\s+day\b/gi, `${daysVal} day`);
   }
 
   return filled;

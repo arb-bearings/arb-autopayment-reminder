@@ -67,6 +67,7 @@ export type DueRecord = {
   dueDate: string;
   openingAmount: number;
   amount: number;
+  quantity?: number;
   currency: string;
   overdueDays: number;
   reference: string;
@@ -218,6 +219,8 @@ export type ReminderLog = {
   relevantAmount?: number;
   totalOutstanding?: number;
   thresholdAmount?: number;
+  cdAmount?: number;
+  eligibleAmount?: number;
 };
 
 export type OperationPasswordKey =

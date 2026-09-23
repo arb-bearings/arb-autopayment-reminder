@@ -127,8 +127,18 @@ export function generateOutstandingPDF(
           console.error("Failed to evaluate CD eligibility in PDF generator:", e);
         }
       }
-       // Box 1 Amount = sum of all dues for this dealer in the current rule stage
-       const box2Amount = calculateRuleOutstanding(dues, currentRuleDay, today);
+       // Box 1 Amount = CD bucket amount for CD rules, or relevant amount / rule stage dues
+       const matchingLog = database?.reminderLogs?.find(
+         (l: any) => (l.dueId === currentDueId && l.ruleId === ruleId) || l.id === currentDueId
+       );
+       let box2Amount = matchingLog?.cdAmount;
+       if (box2Amount === undefined || box2Amount === null) {
+         if (currentRuleDay === 30 || currentRuleDay === 45) {
+           box2Amount = calculateRuleOutstanding(dues, currentRuleDay, today);
+         } else {
+           box2Amount = matchingLog?.relevantAmount ?? calculateRuleOutstanding(dues, currentRuleDay, today);
+         }
+       }
        const currentInvoiceAge = getBillAgeDays(matchedDue?.billDate || matchedDue?.invoiceDate || "", today) || 0;
 
       // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)

@@ -62,10 +62,10 @@ async function main() {
           ownerId,
           ruleId,
           name: '125 Day Reminder',
-          emailSubject: 'Invoicing Stopped: Invoice {{invoiceNumber}} — Immediate Attention Required',
-          emailBody: 'INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 120 days overdue.\n\nYour invoicing has already been stopped due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********',
-          whatsappBody: 'INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 120 days overdue. Invoicing has been stopped. — {{senderCompany}}',
-          smsBody: 'INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 120 days overdue. Invoicing has been stopped. — {{senderCompany}}',
+          emailSubject: 'Invoicing on Hold: Invoice {{invoiceNumber}} — Immediate Attention Required',
+          emailBody: 'INVOICE {{invoiceNumber}}\n\nDear {{contactName}},\n\nThis is to remind you that the payment against Invoice {{invoiceNumber}} dated {{billDate}}, amounting to Rs. {{amount}}, is now 120 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\n{{senderCompany}}\n*********',
+          whatsappBody: 'INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 120 days overdue. Invoicing is on hold. — {{senderCompany}}',
+          smsBody: 'INVOICE {{invoiceNumber}} | Dear {{contactName}}, Invoice {{invoiceNumber}} Dated {{billDate}} of Rs. {{amount}} is 120 days overdue. Invoicing is on hold. — {{senderCompany}}',
           updatedAt: new Date().toISOString()
         });
 
