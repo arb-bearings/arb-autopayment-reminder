@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import type { ReminderLog, DueRecord, ReminderRule } from "@/lib/types";
 import { ChannelLabel } from "./channel-label";
-import { formatDate } from "@/lib/utils";
+import { formatDate, extractDealerCodeAndName } from "@/lib/utils";
 
 interface ReminderQueueTableDispatchProps {
   reminderLogs: ReminderLog[];
@@ -118,7 +118,7 @@ export function ReminderQueueTableDispatch({
                     <td>{due?.invoiceNumber || due?.reference || due?.companyName || "N/A"}</td>
                     <td>
                       <div className="dispatch-company-cell">
-                        <span>{due?.companyName || log.dealerCode || "N/A"}</span>
+                        <span>{extractDealerCodeAndName(log.dealerCode || "", due?.companyName || log.dealerName || "").companyName || due?.companyName || log.dealerName || log.dealerCode || "N/A"}</span>
                         <span
                           className={`dispatch-badge ${
                             log.cdEligible

@@ -2,7 +2,7 @@
 
 import { useId, useState, useMemo } from "react";
 import type { DueRecord, MasterContact } from "@/lib/types";
-import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays } from "@/lib/utils";
+import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays, extractDealerCodeAndName } from "@/lib/utils";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 
 interface GroupedDuesTableProps {
@@ -39,8 +39,17 @@ export function GroupedDuesTable({
     }> = {};
 
     for (const record of dueRecords) {
-      const code = record.dealerCode || record.customerCode || "N/A";
-      const name = record.companyName || "Unknown Party";
+      const extracted = extractDealerCodeAndName(
+        record.dealerCode || record.customerCode || "",
+        record.companyName || ""
+      );
+      const matchedContact = findMatchingMasterContact(record, masterContacts);
+      const code = extracted.dealerCode || record.dealerCode || record.customerCode || matchedContact?.dealerCode || "N/A";
+      const name = extracted.companyName || matchedContact?.companyName || record.companyName || "Unknown Party";
+      const spName = record.salespersonName && record.salespersonName !== "Unassigned"
+        ? record.salespersonName
+        : (matchedContact?.salespersonName || "Unassigned");
+      const spEmail = record.salespersonEmail || matchedContact?.salespersonEmail || "";
       // Grouping key: prefer code if available, else name
       const key = code !== "N/A" ? `code:${code}` : `name:${name}`;
 
@@ -48,8 +57,8 @@ export function GroupedDuesTable({
         groups[key] = {
           dealerCode: code,
           companyName: name,
-          salespersonName: record.salespersonName || "Unassigned",
-          salespersonEmail: record.salespersonEmail || "",
+          salespersonName: spName,
+          salespersonEmail: spEmail,
           invoices: [],
           totalOpening: 0,
           totalPending: 0,

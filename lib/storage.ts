@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getMongoDatabase } from "@/lib/mongodb";
 import { buildEmailBody, buildWhatsappBody, buildSubject } from "@/lib/defaults";
+import { extractDealerCodeAndName, splitDealerCodeAndName } from "@/lib/dealer-utils";
 import type { AppDatabase } from "@/lib/types";
 
 const dbPath = path.join(process.cwd(), "data", "app-db.json");
@@ -156,13 +157,17 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
       : [],
     masterContacts: Array.isArray(source.masterContacts)
       ? source.masterContacts.map((contact) => {
-          const dealerCode = toStringValue(contact?.dealerCode || contact?.customerCode);
+          const rawDealerCode = toStringValue(contact?.dealerCode || contact?.customerCode);
+          const rawCompanyName = toStringValue(contact?.companyName);
+          const { dealerCode, companyName } = extractDealerCodeAndName(rawDealerCode, rawCompanyName);
+          const finalDealerCode = dealerCode || rawDealerCode;
+          const finalCompanyName = companyName || rawCompanyName;
           return {
             id: toStringValue(contact?.id),
             ownerId: toStringValue(contact?.ownerId),
-            dealerCode,
-            customerCode: dealerCode,
-            companyName: toStringValue(contact?.companyName),
+            dealerCode: finalDealerCode,
+            customerCode: finalDealerCode,
+            companyName: finalCompanyName,
             primaryContact: toStringValue(contact?.primaryContact),
             email: toStringValue(contact?.email),
             whatsapp: toStringValue(contact?.whatsapp),
@@ -185,16 +190,20 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           };
         })
       : [],
-        dueRecords: Array.isArray(source.dueRecords)
+    dueRecords: Array.isArray(source.dueRecords)
       ? source.dueRecords.map((record) => {
-          const dealerCode = toStringValue(record?.dealerCode || record?.customerCode);
+          const rawDealerCode = toStringValue(record?.dealerCode || record?.customerCode);
+          const rawCompanyName = toStringValue(record?.companyName);
+          const { dealerCode, companyName } = extractDealerCodeAndName(rawDealerCode, rawCompanyName);
+          const finalDealerCode = dealerCode || rawDealerCode;
+          const finalCompanyName = companyName || rawCompanyName;
           const billDate = toStringValue(record?.billDate || record?.invoiceDate);
           return {
             id: toStringValue(record?.id),
             ownerId: toStringValue(record?.ownerId),
-            dealerCode,
-            customerCode: dealerCode,
-            companyName: toStringValue(record?.companyName),
+            dealerCode: finalDealerCode,
+            customerCode: finalDealerCode,
+            companyName: finalCompanyName,
             billDate,
             invoiceNumber: toStringValue(record?.invoiceNumber),
             invoiceDate: billDate,
@@ -334,10 +343,10 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           discountPercent: toNumberValue(policy?.discountPercent),
           enabled: toBooleanValue(policy?.enabled, true),
           description: toStringValue(policy?.description),
-          cdMessageTemplate: toStringValue(policy?.cdMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-          cdMessageWithOlderTemplate: toStringValue(policy?.cdMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-          cdShortMessageTemplate: toStringValue(policy?.cdShortMessageTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-          cdShortMessageWithOlderTemplate: toStringValue(policy?.cdShortMessageWithOlderTemplate) || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
+          cdMessageTemplate: toStringValue(policy?.cdMessageTemplate) || "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
+          cdMessageWithOlderTemplate: toStringValue(policy?.cdMessageWithOlderTemplate) || "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
+          cdShortMessageTemplate: toStringValue(policy?.cdShortMessageTemplate) || "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. Ensure payment before {{paymentWindowDays}} days.",
+          cdShortMessageWithOlderTemplate: toStringValue(policy?.cdShortMessageWithOlderTemplate) || "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. To avail CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days.",
           createdAt: toStringValue(policy?.createdAt),
           updatedAt: toStringValue(policy?.updatedAt)
         }))
@@ -345,6 +354,9 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
     reminderLogs: Array.isArray(source.reminderLogs)
       ? source.reminderLogs.map((log) => {
           const rawStatus = (log as Record<string, unknown>)?.status;
+          const rawDealerCode = toStringValue(log?.dealerCode);
+          const rawDealerName = toStringValue(log?.dealerName);
+          const { dealerCode, companyName } = extractDealerCodeAndName(rawDealerCode, rawDealerName);
 
           return {
             id: toStringValue(log?.id),
@@ -354,7 +366,8 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             contactId: toStringValue(log?.contactId),
             ruleId: toStringValue(log?.ruleId),
             templateId: toStringValue(log?.templateId),
-            dealerCode: toStringValue(log?.dealerCode),
+            dealerCode: dealerCode || rawDealerCode,
+            dealerName: companyName || rawDealerName,
             invoiceNumber: toStringValue(log?.invoiceNumber),
             reminderDay: toNumberValue(log?.reminderDay),
             billAgeDays: toNumberValue(log?.billAgeDays),
@@ -378,7 +391,6 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             failureReason: toStringValue(log?.failureReason),
             sentAt: toStringValue(log?.sentAt),
             createdAt: toStringValue(log?.createdAt),
-            dealerName: toStringValue(log?.dealerName),
             reminderType: toStringValue(log?.reminderType),
             selectedAgeingStage: toStringValue(log?.selectedAgeingStage),
             invoiceIdsInvolved: Array.isArray(log?.invoiceIdsInvolved) ? log.invoiceIdsInvolved.map(toStringValue) : [],
@@ -389,8 +401,7 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             eligibleAmount: log?.eligibleAmount !== undefined ? toNumberValue(log.eligibleAmount) : undefined
           };
         })
-      : []
-    ,
+      : [],
     operationPasswords: Array.isArray(source.operationPasswords)
       ? source.operationPasswords.map((entry) => ({
           ownerId: toStringValue(entry?.ownerId),
@@ -417,7 +428,13 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           email: toStringValue(entry?.email),
           phoneNumber: toStringValue(entry?.phoneNumber),
           dealerCodes: Array.isArray(entry?.dealerCodes)
-            ? entry.dealerCodes.map(toStringValue).filter(Boolean)
+            ? entry.dealerCodes
+                .map((code) => {
+                  const s = toStringValue(code);
+                  const extracted = splitDealerCodeAndName(s);
+                  return extracted.code || s;
+                })
+                .filter(Boolean)
             : [],
           createdAt: toStringValue(entry?.createdAt),
           updatedAt: toStringValue(entry?.updatedAt)
@@ -444,6 +461,70 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
   db.reminderRules = db.reminderRules.filter((r) => !removedTriggerDays.has(r.triggerDay));
   const activeRuleIds = new Set(db.reminderRules.map((r) => r.id));
   db.templates = db.templates.filter((t) => activeRuleIds.has(t.ruleId));
+
+  // Auto-heal dueRecords against masterContacts if contacts were missing due to embedded dealer code in companyName
+  if (db.masterContacts.length > 0 && db.dueRecords.length > 0) {
+    const contactMapByCode = new Map<string, typeof db.masterContacts[0]>();
+    const contactMapByName = new Map<string, typeof db.masterContacts[0]>();
+    for (const c of db.masterContacts) {
+      if (c.dealerCode) contactMapByCode.set(c.dealerCode.toLowerCase().trim(), c);
+      if (c.companyName) contactMapByName.set(c.companyName.toLowerCase().trim(), c);
+    }
+
+    for (const due of db.dueRecords) {
+      if (due.contactMatchStatus === "missing" || !due.matchedContactId) {
+        const dCode = (due.dealerCode || due.customerCode || "").toLowerCase().trim();
+        const dName = (due.companyName || "").toLowerCase().trim();
+        const matched = (dCode ? contactMapByCode.get(dCode) : null) || (dName ? contactMapByName.get(dName) : null);
+        if (matched) {
+          due.matchedContactId = matched.id;
+          due.matchedContactName = matched.primaryContact || matched.companyName || "";
+          due.matchedEmail = matched.email || "";
+          due.matchedWhatsapp = matched.whatsapp || "";
+          due.matchedSms = matched.sms || "";
+          due.contactMatchStatus = "matched";
+          if (!due.dealerCode && matched.dealerCode) {
+            due.dealerCode = matched.dealerCode;
+            due.customerCode = matched.dealerCode;
+          }
+          if (matched.companyName && !due.companyName) {
+            due.companyName = matched.companyName;
+          }
+        }
+      }
+    }
+  }
+
+  // Auto-heal salesperson assignments on dueRecords & masterContacts
+  if (db.salespersons.length > 0) {
+    const spMap = new Map<string, typeof db.salespersons[0]>();
+    for (const sp of db.salespersons) {
+      for (const code of sp.dealerCodes) {
+        const c = code.toLowerCase().trim();
+        if (c) spMap.set(c, sp);
+      }
+    }
+    for (const c of db.masterContacts) {
+      if (!c.salespersonName && c.dealerCode) {
+        const sp = spMap.get(c.dealerCode.toLowerCase().trim());
+        if (sp) {
+          c.salespersonId = sp.id;
+          c.salespersonName = sp.name;
+          c.salespersonEmail = sp.email;
+        }
+      }
+    }
+    for (const due of db.dueRecords) {
+      if ((!due.salespersonName || due.salespersonName === "Unassigned") && due.dealerCode) {
+        const sp = spMap.get(due.dealerCode.toLowerCase().trim());
+        if (sp) {
+          due.salespersonId = sp.id;
+          due.salespersonName = sp.name;
+          due.salespersonEmail = sp.email;
+        }
+      }
+    }
+  }
 
   return ensureAllRulesExist(db);
 }
@@ -520,10 +601,10 @@ function migrateCashDiscountPolicies(db: AppDatabase): AppDatabase {
   const migrated = db.cashDiscountPolicies.map((policy) => {
     return {
       ...policy,
-      cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
-      cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
-      cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD. Ensure payment before {{paymentWindowDays}} days.",
-      cdShortMessageWithOlderTemplate: "To avail {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days."
+      cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
+      cdMessageWithOlderTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
+      cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. Ensure payment before {{paymentWindowDays}} days.",
+      cdShortMessageWithOlderTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. To avail CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days."
     };
   });
   return { ...db, cashDiscountPolicies: migrated };

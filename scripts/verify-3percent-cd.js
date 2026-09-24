@@ -75,7 +75,7 @@ async function main() {
     const eligibleAmount1 = 40000.00;
     const daysBeforeDue1 = calculateDynamicDays(28, 30); // 2 days
 
-    const cdMessageWithOlder = `To avail the 3% CD on ${formatCurrency(cdAmount1)}, please clear ${formatCurrency(eligibleAmount1)} before the invoice completes 30 days to ensure that the payment is eligible for cash discount.`;
+    const cdMessageWithOlder = `Please note that a payment of ${formatCurrency(cdAmount1)} is due within the next ${daysBeforeDue1} days to avail the 3% CD benefit on the basic value of invoice.\n\nTo avail the 3% CD on ${formatCurrency(cdAmount1)}, please clear ${formatCurrency(eligibleAmount1)} before the invoice completes 30 days to ensure that the payment is eligible for cash discount.`;
 
     const replacements1 = {
       contactName: "ABC Bearings Traders",
@@ -116,7 +116,7 @@ async function main() {
     const cdAmount2 = 25000.00;
     const daysBeforeDue2 = calculateDynamicDays(27, 30); // 3 days
 
-    const cdMessageClean = `Please note that a payment of ${formatCurrency(cdAmount2)} is due within the next ${daysBeforeDue2} days to avail the 3% CD benefit on the invoice.\n\nTo avail the 3% CD, please ensure that the payment is made before the invoice completes 30 days.`;
+    const cdMessageClean = `Please note that a payment of ${formatCurrency(cdAmount2)} is due within the next ${daysBeforeDue2} days to avail the 3% CD benefit on the basic value of invoice.\n\nTo avail the 3% CD, please ensure that the payment is made before the invoice completes 30 days.`;
 
     const replacements2 = {
       contactName: "XYZ Motors",

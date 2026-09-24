@@ -1,7 +1,8 @@
 import type { AppDatabase, Salesperson, User } from "@/lib/types";
+import { extractDealerCodeAndName, splitDealerCodeAndName } from "@/lib/dealer-utils";
 
-function normalizeDealerCode(value: string) {
-  return value.trim().toLowerCase();
+function normalizeDealerCode(value: string | undefined | null) {
+  return (value || "").trim().toLowerCase();
 }
 
 export function applySalespersonMappings(
@@ -13,8 +14,9 @@ export function applySalespersonMappings(
   const dealerMap = new Map<string, Salesperson>();
 
   salespersons.forEach((salesperson) => {
-    salesperson.dealerCodes.forEach((dealerCode) => {
-      const key = normalizeDealerCode(dealerCode);
+    salesperson.dealerCodes.forEach((rawDealerCode) => {
+      const extracted = splitDealerCodeAndName(rawDealerCode);
+      const key = normalizeDealerCode(extracted.code || rawDealerCode);
       if (key) {
         dealerMap.set(key, salesperson);
       }
@@ -26,9 +28,10 @@ export function applySalespersonMappings(
       return;
     }
 
-    const salesperson = dealerMap.get(
-      normalizeDealerCode(contact.dealerCode || contact.customerCode)
-    );
+    const rawCode = contact.dealerCode || contact.customerCode || "";
+    const extracted = extractDealerCodeAndName(rawCode, contact.companyName);
+    const key = normalizeDealerCode(extracted.dealerCode || rawCode);
+    const salesperson = dealerMap.get(key);
 
     if (!salesperson) {
       return;
@@ -44,7 +47,10 @@ export function applySalespersonMappings(
       return;
     }
 
-    const salesperson = dealerMap.get(normalizeDealerCode(due.dealerCode || due.customerCode));
+    const rawCode = due.dealerCode || due.customerCode || "";
+    const extracted = extractDealerCodeAndName(rawCode, due.companyName);
+    const key = normalizeDealerCode(extracted.dealerCode || rawCode);
+    const salesperson = dealerMap.get(key);
 
     if (!salesperson) {
       return;
