@@ -543,8 +543,10 @@ export function buildReminderEmailHtml(log: ReminderLog, due: DueRecord, allDues
   const policies = database?.cashDiscountPolicies?.filter((p: any) => p.ownerId === due.ownerId) || [];
   const cdEvaluation = evaluateCashDiscountEligibility(due, filteredDues, policies, today, currentRuleDay);
 
-  // Box 1 Amount = sum of all dues for this dealer in the current rule stage
-  const box2Amount = log.relevantAmount ?? calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today);
+  // Box 1 Amount = CD amount for CD rules, or relevant amount / rule stage dues
+  const box2Amount = (currentRuleDay === 30 || currentRuleDay === 45)
+    ? (log.cdAmount ?? cdEvaluation.cdAmount ?? log.relevantAmount ?? calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today))
+    : (log.relevantAmount ?? calculateRuleOutstanding(allDuesForDealer, currentRuleDay, today));
 
   // Find all other dues for this dealer (excluding the current invoice, must be older than current invoice)
   const currentInvoiceAge = getBillAgeDays(due?.billDate || due?.invoiceDate || "", today) || 0;
@@ -849,28 +851,22 @@ export function evaluateCashDiscountEligibility(
     ? cdBucketDues.reduce((sum, entry) => sum + (entry.amount || 0), 0)
     : (due.amount || 0);
 
-  // Determine earliest invoice date in the CD bucket
-  const earliestCdTimestamp = cdBucketDues.reduce((earliest, entry) => {
-    const d = new Date(entry.billDate || entry.invoiceDate || "");
-    const time = !Number.isNaN(d.getTime()) ? d.getTime() : Infinity;
-    return time < earliest ? time : earliest;
-  }, Infinity);
-
-  // Invoices older than the CD bucket
+  // Invoices strictly older than the CD window
   const olderUnpaidThanCd = allDuesForDealer.filter((entry) => {
     if (!(entry.amount > 0) || cdBucketDues.some((cd) => cd.id === entry.id)) return false;
-    const otherDate = new Date(entry.billDate || entry.invoiceDate || "");
-    if (Number.isNaN(otherDate.getTime())) return false;
-    if (earliestCdTimestamp !== Infinity) {
-      return otherDate.getTime() < earliestCdTimestamp;
-    }
+    const age = getBillAgeDays(entry.billDate || entry.invoiceDate, referenceDate);
+    if (age === null) return false;
+    if (paymentWindowDays === 30) return age > 30;
+    if (paymentWindowDays === 45) return age > 45;
     return false;
   });
 
-  const hasOlderUnpaid = olderUnpaidThanCd.length > 0 || olderUnpaidBills.length > 0;
-  const olderTotal = olderUnpaidThanCd.length > 0
+  const hasOlderUnpaid = (paymentWindowDays > 0)
+    ? olderUnpaidThanCd.length > 0
+    : olderUnpaidBills.length > 0;
+  const olderTotal = (paymentWindowDays > 0 && olderUnpaidThanCd.length > 0)
     ? olderUnpaidThanCd.reduce((sum, entry) => sum + (entry.amount || 0), 0)
-    : olderUnpaidBills.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    : (paymentWindowDays === 0 ? olderUnpaidBills.reduce((sum, entry) => sum + (entry.amount || 0), 0) : 0);
   const eligibleAmount = cdAmount + olderTotal;
 
   if (!eligiblePolicy) {
@@ -1040,12 +1036,13 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         continue;
       }
 
-      // Group invoices into the 6 non-overlapping ageing buckets:
+      // Group invoices into non-overlapping ageing buckets:
       const bucket1: DueRecord[] = []; // Age > 120
       const bucket2: DueRecord[] = []; // Age > 90 and <= 120
       const bucket3: DueRecord[] = []; // Age > 60 and <= 90
       const bucket4: DueRecord[] = []; // Age > 45 and <= 60
       const bucket5: DueRecord[] = []; // Age >= 40 and <= 45 (2% CD)
+      const bucket_mid: DueRecord[] = []; // Age > 30 and < 40 (intermediate older dues)
       const bucket6: DueRecord[] = []; // Age >= 25 and <= 30 (3% CD)
 
       for (const item of invoicesWithAge) {
@@ -1060,6 +1057,8 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           bucket4.push(item.inv);
         } else if (age >= 40 && age <= 45) {
           bucket5.push(item.inv);
+        } else if (age > 30 && age < 40) {
+          bucket_mid.push(item.inv);
         } else if (age >= 25 && age <= 30) {
           bucket6.push(item.inv);
         }
@@ -1071,6 +1070,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       const sum3 = bucket3.reduce((sum, inv) => sum + inv.amount, 0);
       const sum4 = bucket4.reduce((sum, inv) => sum + inv.amount, 0);
       const sum5 = bucket5.reduce((sum, inv) => sum + inv.amount, 0);
+      const sum_mid = bucket_mid.reduce((sum, inv) => sum + inv.amount, 0);
       const sum6 = bucket6.reduce((sum, inv) => sum + inv.amount, 0);
 
       // Accumulation logic: process from oldest (bucket 1) to newest (bucket 6)
@@ -1143,6 +1143,10 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
 
       // Check Stage 6 (3% CD)
       if (selectedStageNum === 0 && bucket6.length > 0) {
+        if (bucket_mid.length > 0) {
+          accumulated += sum_mid;
+          accumulatedInvoices.push(...bucket_mid);
+        }
         accumulated += sum6;
         accumulatedInvoices.push(...bucket6);
         if (accumulated >= thresholdAmount) {
@@ -1254,12 +1258,21 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       );
 
       if (selectedStageNum === 5 || selectedStageNum === 6) {
-        const cdInvoices = triggeringBucketInvoices;
+        const is2Pct = selectedStageNum === 5;
+        const cdInvoices = is2Pct ? bucket5 : bucket6;
+        const olderInvoices = dealerInvoices.filter((inv) => {
+          const age = getBillAgeDays(inv.billDate || inv.invoiceDate, today);
+          if (age === null || !(inv.amount > 0)) return false;
+          return is2Pct ? (age > 45) : (age > 30);
+        });
         const cdAmount = cdInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
-        const eligibleAmount = accumulated;
+        const olderAmount = olderInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+        const eligibleAmount = cdAmount + olderAmount;
+        const hasOlderUnpaid = olderInvoices.length > 0;
+
         cdEvaluation.cdAmount = cdAmount;
         cdEvaluation.eligibleAmount = eligibleAmount;
-        cdEvaluation.hasOlderUnpaid = selectedInvoices.length > cdInvoices.length;
+        cdEvaluation.hasOlderUnpaid = hasOlderUnpaid;
         cdEvaluation.currency = oldestSelectedDue.currency;
       }
 
@@ -1879,6 +1892,9 @@ export async function getEmailContentForLog(
   }
   if (log.eligibleAmount !== undefined) {
     cdEvaluation.eligibleAmount = log.eligibleAmount;
+  }
+  if (log.eligibleAmount !== undefined && log.cdAmount !== undefined) {
+    cdEvaluation.hasOlderUnpaid = log.eligibleAmount > log.cdAmount;
   }
 
   // Find sender company name from workspace users

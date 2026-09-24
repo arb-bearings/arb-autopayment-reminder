@@ -255,7 +255,7 @@ function buildWhatsapp120() {
 
 // ─── Subject Lines ────────────────────────────────────────────────────────────
 
-function buildSubject(triggerDay: number) {
+export function buildSubject(triggerDay: number) {
   if (triggerDay <= 60) {
     return `Outstanding: Payment more than ${triggerDay} days due in 5 days`;
   }
