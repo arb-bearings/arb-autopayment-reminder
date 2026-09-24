@@ -358,10 +358,10 @@ export function createDefaultRuleSet(ownerId: string) {
     discountPercent: policy.discountPercent,
     enabled: true,
     description: `Customer remains eligible for ${policy.discountPercent}% cash discount when payment is cleared within ${policy.paymentWindowDays} days and no older unpaid invoices exist.`,
-    cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
-    cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
-    cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD. Ensure payment before {{paymentWindowDays}} days.",
-    cdShortMessageWithOlderTemplate: "To avail {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days.",
+    cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
+    cdMessageWithOlderTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
+    cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. Ensure payment before {{paymentWindowDays}} days.",
+    cdShortMessageWithOlderTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. To avail CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days.",
     createdAt: generatedAt,
     updatedAt: generatedAt
   }));

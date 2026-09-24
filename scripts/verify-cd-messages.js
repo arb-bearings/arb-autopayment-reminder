@@ -74,7 +74,7 @@ async function main() {
     const eligibleAmount = 21002.07;
     const daysBeforeDue = calculateDynamicDays(43, 45); // 2 days
 
-    const cdMessageWithOlder = `To avail the 2% CD on ${formatCurrency(cdAmount)}, please clear ${formatCurrency(eligibleAmount)} before the invoice completes 45 days to ensure that the payment is eligible for cash discount.`;
+    const cdMessageWithOlder = `Please note that a payment of ${formatCurrency(cdAmount)} is due within the next ${daysBeforeDue} days to avail the 2% CD benefit on the basic value of invoice.\n\nTo avail the 2% CD on ${formatCurrency(cdAmount)}, please clear ${formatCurrency(eligibleAmount)} before the invoice completes 45 days to ensure that the payment is eligible for cash discount.`;
 
     const replacements = {
       contactName: "Nagpal Bearing Centre",

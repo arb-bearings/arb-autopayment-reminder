@@ -101,19 +101,19 @@ function PolicyForm({
       </label>
       <label className="field rule-span">
         <span>Email/Long CD Message Template (Standard)</span>
-        <textarea name="cdMessageTemplate" rows={2} defaultValue={policy?.cdMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
+        <textarea name="cdMessageTemplate" rows={2} defaultValue={policy?.cdMessageTemplate || "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days."} required />
       </label>
       <label className="field rule-span">
         <span>Email/Long CD Message Template (With Older Pending Bills)</span>
-        <textarea name="cdMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
+        <textarea name="cdMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdMessageWithOlderTemplate || "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the basic value of invoice.\n\nTo avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount."} required />
       </label>
       <label className="field rule-span">
         <span>WhatsApp/Short CD Message Template (Standard)</span>
-        <textarea name="cdShortMessageTemplate" rows={2} defaultValue={policy?.cdShortMessageTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
+        <textarea name="cdShortMessageTemplate" rows={2} defaultValue={policy?.cdShortMessageTemplate || "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. Ensure payment before {{paymentWindowDays}} days."} required />
       </label>
       <label className="field rule-span">
         <span>WhatsApp/Short CD Message Template (With Older Pending Bills)</span>
-        <textarea name="cdShortMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdShortMessageWithOlderTemplate || "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."} required />
+        <textarea name="cdShortMessageWithOlderTemplate" rows={2} defaultValue={policy?.cdShortMessageWithOlderTemplate || "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD on basic value of invoice. To avail CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days."} required />
       </label>
       <div className="rule-span">
         <ProtectedSubmitButton className="button">

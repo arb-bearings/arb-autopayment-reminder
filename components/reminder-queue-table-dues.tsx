@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import type { ReminderLog } from "@/lib/types";
 import { ChannelLabel } from "./channel-label";
-import { formatDate } from "@/lib/utils";
+import { formatDate, extractDealerCodeAndName } from "@/lib/utils";
 
 interface ReminderQueueTableDuesProps {
   reminderLogs: ReminderLog[];
@@ -112,7 +112,7 @@ export function ReminderQueueTableDues({
                     </td>
                     <td>{index + 1}</td>
                     <td>{log.invoiceNumber || "N/A"}</td>
-                    <td>{log.dealerCode || "N/A"}</td>
+                    <td>{extractDealerCodeAndName(log.dealerCode || "", log.dealerName || "").dealerCode || log.dealerCode || "N/A"}</td>
                     <td>
                       <ChannelLabel channel={log.channel} />
                     </td>

@@ -9,6 +9,7 @@ import { buildDueContactMatch } from "@/lib/contact-matching";
 import { applySalespersonMappings } from "@/lib/salesperson-mapping";
 import { readDatabase, updateDatabase } from "@/lib/storage";
 import type { DueRecord, MasterContact } from "@/lib/types";
+import { extractDealerCodeAndName } from "@/lib/dealer-utils";
 
 function normalizeWorkbookHeader(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, " ");
@@ -70,9 +71,13 @@ const dueManagedHeaders = [
 ];
 
 function buildMasterWorkbookRow(record: MasterContact) {
+  const extracted = extractDealerCodeAndName(
+    record.dealerCode || record.customerCode,
+    record.companyName
+  );
   return mergeRawWithCanonical(record.raw || {}, {
-    "Dealer Code": record.dealerCode || record.customerCode,
-    "Company Name": record.companyName,
+    "Dealer Code": extracted.dealerCode || record.dealerCode || record.customerCode,
+    "Company Name": extracted.companyName || record.companyName,
     "Contact Person": record.primaryContact,
     Email: record.email,
     WhatsApp: record.whatsapp,
@@ -81,15 +86,19 @@ function buildMasterWorkbookRow(record: MasterContact) {
 }
 
 function buildDueWorkbookRow(record: DueRecord) {
+  const extracted = extractDealerCodeAndName(
+    record.dealerCode || record.customerCode,
+    record.companyName
+  );
   return mergeRawWithCanonical(record.raw || {}, {
     Date: (record.billDate || record.invoiceDate) ? (record.billDate || record.invoiceDate).slice(0, 10) : "",
     "Ref. No.": record.invoiceNumber || record.reference,
-    "Party's Name": record.companyName,
+    "Party's Name": extracted.companyName || record.companyName,
     "Opening Amount": record.openingAmount,
     "Pending Amount": record.amount,
     "Due on": record.dueDate ? record.dueDate.slice(0, 10) : "",
     "Overdue by days": record.overdueDays,
-    "Dealer Code": record.dealerCode || record.customerCode,
+    "Dealer Code": extracted.dealerCode || record.dealerCode || record.customerCode,
     Currency: record.currency
   });
 }

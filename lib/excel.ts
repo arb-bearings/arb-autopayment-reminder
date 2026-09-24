@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import * as XLSX from "xlsx";
 import { buildDueContactMatch } from "@/lib/contact-matching";
+import { extractDealerCodeAndName, splitDealerCodeAndName } from "@/lib/dealer-utils";
 import { formatEmailList } from "@/lib/utils";
 import type { DueRecord, MasterContact, Salesperson } from "@/lib/types";
 
@@ -500,18 +501,25 @@ function expandGroupedDueRows(rows: RawRow[]) {
     const rowPartyName = toText(pickValue(normalizedRow, dueFieldCandidates.companyName));
     const rowDealerCode = toText(pickValue(normalizedRow, dueFieldCandidates.dealerCode));
 
-    if (rowPartyName || rowDealerCode) {
-      activePartyName = rowPartyName;
-      activeDealerCode = rowDealerCode;
+    const extracted = extractDealerCodeAndName(rowDealerCode, rowPartyName);
+
+    if (extracted.companyName || extracted.dealerCode) {
+      activePartyName = extracted.companyName;
+      activeDealerCode = extracted.dealerCode;
     }
 
-    if (!rowPartyName && activePartyName) {
-      const companyHeader = getExistingRowKey(row, dueFieldCandidates.companyName) || "Party's Name";
+    const companyHeader = getExistingRowKey(row, dueFieldCandidates.companyName) || "Party's Name";
+    const dealerCodeHeader = getExistingRowKey(row, dueFieldCandidates.dealerCode) || "Dealer Code";
+
+    if (extracted.companyName) {
+      row[companyHeader] = extracted.companyName;
+    } else if (activePartyName) {
       row[companyHeader] = activePartyName;
     }
 
-    if (!rowDealerCode && activeDealerCode) {
-      const dealerCodeHeader = getExistingRowKey(row, dueFieldCandidates.dealerCode) || "Dealer Code";
+    if (extracted.dealerCode) {
+      row[dealerCodeHeader] = extracted.dealerCode;
+    } else if (activeDealerCode) {
       row[dealerCodeHeader] = activeDealerCode;
     }
 
@@ -1095,14 +1103,21 @@ function matchMasterContactByDealerCode(
   dealerCode: string,
   contacts: MasterContact[]
 ) {
-  if (!dealerCode.trim()) {
+  const trimmed = dealerCode.trim();
+  if (!trimmed) {
     return null;
   }
 
-  const normalizedDealerCode = normalizeHeader(dealerCode);
+  const normalizedDealerCode = normalizeHeader(trimmed);
   return (
-    contacts.find((contact) => normalizeHeader(contact.dealerCode || contact.customerCode) === normalizedDealerCode) ??
-    null
+    contacts.find((contact) => {
+      const contactCode = (contact.dealerCode || contact.customerCode || "").trim();
+      if (normalizeHeader(contactCode) === normalizedDealerCode) {
+        return true;
+      }
+      const extracted = extractDealerCodeAndName(contactCode, contact.companyName);
+      return normalizeHeader(extracted.dealerCode) === normalizedDealerCode;
+    }) ?? null
   );
 }
 
@@ -1111,20 +1126,25 @@ export function mapMasterRows(rows: RawRow[], ownerId: string) {
 
   return rows
     .map(normalizeRow)
+    .map((row) => {
+      const rawDealerCode = toText(pickValue(row, masterFieldCandidates.dealerCode));
+      const rawCompanyName = toText(pickValue(row, masterFieldCandidates.companyName));
+      const { dealerCode, companyName } = extractDealerCodeAndName(rawDealerCode, rawCompanyName);
+      return { row, dealerCode, companyName };
+    })
     .filter(
-      (row) =>
-        toText(pickValue(row, masterFieldCandidates.dealerCode)) !== "" &&
-        toText(pickValue(row, masterFieldCandidates.companyName)) !== ""
+      ({ dealerCode, companyName }) => dealerCode !== "" || companyName !== ""
     )
-    .map<MasterContact>((row) => {
-      const dealerCode = toText(pickValue(row, masterFieldCandidates.dealerCode));
+    .map<MasterContact>(({ row, dealerCode, companyName }) => {
+      const finalDealerCode = dealerCode || companyName;
+      const finalCompanyName = companyName || dealerCode;
 
       return {
         id: randomUUID(),
         ownerId,
-        dealerCode,
-        customerCode: dealerCode,
-        companyName: toText(pickValue(row, masterFieldCandidates.companyName)),
+        dealerCode: finalDealerCode,
+        customerCode: finalDealerCode,
+        companyName: finalCompanyName,
         primaryContact: toText(pickValue(row, masterFieldCandidates.primaryContact)),
         email: formatEmailList(toText(pickValue(row, masterFieldCandidates.email))),
         whatsapp: toText(pickValue(row, masterFieldCandidates.whatsapp)),
@@ -1148,18 +1168,18 @@ export function mapDueRows(rows: RawRow[], ownerId: string, contacts: MasterCont
 
   const mappedRows = expandedRows
     .map(normalizeRow)
-    .filter(
-      (row) =>
-        (
-          toText(pickValue(row, dueFieldCandidates.dealerCode)) !== "" ||
-          toText(pickValue(row, dueFieldCandidates.companyName)) !== ""
-        ) &&
-        toDateValue(pickValue(row, dueFieldCandidates.billDate)) !== ""
-    )
-    .map<DueRecord>((row) => {
-      const dealerCode = toText(pickValue(row, dueFieldCandidates.dealerCode));
-      const companyName = toText(pickValue(row, dueFieldCandidates.companyName));
+    .map((row) => {
+      const rawDealerCode = toText(pickValue(row, dueFieldCandidates.dealerCode));
+      const rawCompanyName = toText(pickValue(row, dueFieldCandidates.companyName));
+      const { dealerCode, companyName } = extractDealerCodeAndName(rawDealerCode, rawCompanyName);
       const billDate = toDateValue(pickValue(row, dueFieldCandidates.billDate));
+      return { row, dealerCode, companyName, billDate };
+    })
+    .filter(
+      ({ dealerCode, companyName, billDate }) =>
+        (dealerCode !== "" || companyName !== "") && billDate !== ""
+    )
+    .map<DueRecord>(({ row, dealerCode, companyName, billDate }) => {
       const pendingAmount = toAmount(pickValue(row, dueFieldCandidates.amount));
       const quantity = toAmount(pickValue(row, dueFieldCandidates.quantity));
       const contactByDealer = matchMasterContactByDealerCode(dealerCode, contacts);
@@ -1178,12 +1198,15 @@ export function mapDueRows(rows: RawRow[], ownerId: string, contacts: MasterCont
         contacts
       );
 
+      const finalDealerCode = dealerCode || match.dealerCode || "";
+      const finalCompanyName = match.companyName || companyName || finalDealerCode || "";
+
       return {
         id: randomUUID(),
         ownerId,
-        dealerCode,
-        customerCode: dealerCode,
-        companyName: match.companyName,
+        dealerCode: finalDealerCode,
+        customerCode: finalDealerCode,
+        companyName: finalCompanyName,
         billDate,
         invoiceNumber: toText(pickValue(row, dueFieldCandidates.invoiceNumber)),
         invoiceDate: billDate,
@@ -1244,6 +1267,12 @@ export function mapDueRows(rows: RawRow[], ownerId: string, contacts: MasterCont
 export function parseDealerCodeList(value: string) {
   return value
     .split(/[\n,;]/)
+    .map((entry) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return "";
+      const extracted = splitDealerCodeAndName(trimmed);
+      return extracted.code || trimmed;
+    })
     .map((entry) => entry.trim())
     .filter(Boolean);
 }

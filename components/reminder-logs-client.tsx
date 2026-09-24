@@ -2,7 +2,7 @@
 
 import { useId, useState, useMemo } from "react";
 import type { ReminderLog, DueRecord, MasterContact } from "@/lib/types";
-import { formatCurrency, formatDate, getBillAgeDays, daysBetween } from "@/lib/utils";
+import { formatCurrency, formatDate, getBillAgeDays, daysBetween, extractDealerCodeAndName } from "@/lib/utils";
 import { ChannelLabel } from "@/components/channel-label";
 
 interface ReminderLogsClientProps {
@@ -47,10 +47,11 @@ export function ReminderLogsClient({
     // 2. Group by dealer identifier (code or name)
     const groups: Record<string, ReminderLog[]> = {};
     for (const log of sentLogs) {
+      const extracted = extractDealerCodeAndName(log.dealerCode || "", log.dealerName || "");
       const code =
-        log.dealerCode && log.dealerCode !== "N/A"
-          ? log.dealerCode.trim()
-          : log.dealerName?.trim() || "N/A";
+        extracted.dealerCode && extracted.dealerCode !== "N/A"
+          ? extracted.dealerCode.trim()
+          : extracted.companyName?.trim() || "N/A";
       if (!groups[code]) {
         groups[code] = [];
       }
@@ -62,22 +63,30 @@ export function ReminderLogsClient({
     return Object.entries(groups).map(([groupKey, logsForDealer]) => {
       // Find dealer name from dueRecords, then masterContacts, or fallback to the log itself
       const matchingDue = dueRecords.find((due) => {
-        const dCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
-        const dName = (due.companyName || "").trim().toLowerCase();
+        const extracted = extractDealerCodeAndName(due.dealerCode || due.customerCode || "", due.companyName || "");
+        const dCode = (extracted.dealerCode || due.dealerCode || due.customerCode || "").trim().toLowerCase();
+        const dName = (extracted.companyName || due.companyName || "").trim().toLowerCase();
         const target = groupKey.toLowerCase();
         return (dCode && dCode === target) || (dName && dName === target);
       });
 
       const matchingContact = masterContacts.find((c) => {
-        const cCode = (c.dealerCode || "").trim().toLowerCase();
-        const cName = (c.companyName || "").trim().toLowerCase();
+        const extracted = extractDealerCodeAndName(c.dealerCode || c.customerCode || "", c.companyName || "");
+        const cCode = (extracted.dealerCode || c.dealerCode || "").trim().toLowerCase();
+        const cName = (extracted.companyName || c.companyName || "").trim().toLowerCase();
         const target = groupKey.toLowerCase();
         return (cCode && cCode === target) || (cName && cName === target);
       });
 
+      const firstLogExtracted = extractDealerCodeAndName(
+        logsForDealer[0]?.dealerCode || "",
+        logsForDealer[0]?.dealerName || ""
+      );
+
       const companyName =
         matchingDue?.companyName ||
         matchingContact?.companyName ||
+        firstLogExtracted.companyName ||
         logsForDealer.find((l) => l.dealerName)?.dealerName ||
         logsForDealer[0]?.recipient ||
         "Unknown Dealer";
@@ -86,6 +95,7 @@ export function ReminderLogsClient({
         matchingDue?.dealerCode ||
         matchingDue?.customerCode ||
         matchingContact?.dealerCode ||
+        firstLogExtracted.dealerCode ||
         logsForDealer.find((l) => l.dealerCode && l.dealerCode !== "N/A")?.dealerCode ||
         groupKey;
 

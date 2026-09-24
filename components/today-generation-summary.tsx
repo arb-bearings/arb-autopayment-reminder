@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import type { DueRecord, MasterContact, ReminderLog } from "@/lib/types";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, extractDealerCodeAndName } from "@/lib/utils";
 import { ChannelLabel } from "./channel-label";
 import Link from "next/link";
 
@@ -48,13 +48,17 @@ export function TodayGenerationSummary({
   // Enrich each log with contact matching information
   const enrichedLogs = useMemo(() => {
     return todayGeneratedLogs.map((log) => {
+      const extracted = extractDealerCodeAndName(log.dealerCode || "", log.dealerName || "");
+      const cleanDealerCode = extracted.dealerCode || log.dealerCode || "";
+      const cleanDealerName = extracted.companyName || log.dealerName || "";
+
       let matchingContact = log.contactId ? masterContactMap.get(log.contactId) : null;
       if (!matchingContact) {
         matchingContact = findMatchingMasterContact(
           {
-            dealerCode: log.dealerCode,
-            customerCode: log.dealerCode,
-            companyName: log.dealerName || "",
+            dealerCode: cleanDealerCode,
+            customerCode: cleanDealerCode,
+            companyName: cleanDealerName,
             matchedContactId: "",
             matchedContactName: "",
             matchedEmail: "",
@@ -66,6 +70,9 @@ export function TodayGenerationSummary({
         );
       }
 
+      const finalDealerCode = cleanDealerCode || matchingContact?.dealerCode || "";
+      const finalDealerName = cleanDealerName || matchingContact?.companyName || "Unknown Dealer";
+
       const hasMissingReason =
         Boolean(log.failureReason && /contact|master/i.test(log.failureReason)) ||
         log.recipient.toLowerCase().includes("no master contact") ||
@@ -73,7 +80,7 @@ export function TodayGenerationSummary({
 
       const isMatched = Boolean(matchingContact) && !hasMissingReason && Boolean(log.recipient) && !log.recipient.toLowerCase().includes("no contact");
 
-      let contactName = matchingContact?.primaryContact || log.dealerName || "Accounts Team";
+      let contactName = matchingContact?.primaryContact || finalDealerName || "Accounts Team";
       if (contactName === "Accounts Team" && matchingContact?.companyName) {
         contactName = matchingContact.primaryContact || matchingContact.companyName;
       }
@@ -91,6 +98,8 @@ export function TodayGenerationSummary({
 
       return {
         ...log,
+        dealerCode: finalDealerCode,
+        dealerName: finalDealerName,
         matchingContact,
         isMatched,
         contactName,

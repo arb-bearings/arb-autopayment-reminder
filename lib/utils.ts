@@ -1,3 +1,5 @@
+export * from "@/lib/dealer-utils";
+
 export function slugify(value: string) {
   return value
     .toLowerCase()

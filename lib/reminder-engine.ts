@@ -30,7 +30,8 @@ import {
   daysBetween,
   parseEmailList,
   isValidEmailList,
-  formatEmailList
+  formatEmailList,
+  extractDealerCodeAndName
 } from "@/lib/utils";
 import { sendPaymentReminder } from "@/services/interaktService";
 import { buildEmailBody, buildWhatsappBody } from "@/lib/defaults";
@@ -157,9 +158,10 @@ function buildEligibleAmount(evaluation: CashDiscountEvaluation, currency = "INR
  * Returns the full CD sentence based on eligibility and whether older unpaid
  * invoices exist. Returns "" when the bill is outside every CD window.
  *
- * No older unpaid:  "Please note that a payment of ₹8,190.39 is due within the next 2 days to avail the 2% CD benefit on the invoice.
+ * No older unpaid:  "Please note that a payment of ₹8,190.39 is due within the next 2 days to avail the 2% CD benefit on the basic value of invoice.
  *                    To avail the 2% CD, please ensure that the payment is made before the invoice completes 45 days."
- * Has older unpaid: "To avail the 2% CD on ₹8,190.39, please clear ₹21,002.07 before the invoice completes 45 days to ensure that the payment is eligible for cash discount."
+ * Has older unpaid: "Please note that a payment of ₹8,190.39 is due within the next 2 days to avail the 2% CD benefit on the basic value of invoice.
+ *                    To avail the 2% CD on ₹8,190.39, please clear ₹21,002.07 before the invoice completes 45 days to ensure that the payment is eligible for cash discount."
  */
 function buildCdMessage(evaluation: CashDiscountEvaluation, currency = "INR", daysBeforeDue = 5): string {
   if (!evaluation.eligible || !evaluation.policy) {
@@ -170,10 +172,12 @@ function buildCdMessage(evaluation: CashDiscountEvaluation, currency = "INR", da
   const eligAmt = evaluation.eligibleAmount !== undefined ? formatCurrency(evaluation.eligibleAmount, currency) : cdAmt;
   const windowDays = evaluation.policy.paymentWindowDays;
 
+  const introLine = `Please note that a payment of ${cdAmt} is due within the next ${daysBeforeDue} days to avail the ${pct} CD benefit on the basic value of invoice.`;
+
   if (evaluation.hasOlderUnpaid) {
-    return `To avail the ${pct} CD on ${cdAmt || "this invoice"}, please clear ${eligAmt} before the invoice completes ${windowDays} days to ensure that the payment is eligible for cash discount.`;
+    return `${introLine}\n\nTo avail the ${pct} CD on ${cdAmt || "this invoice"}, please clear ${eligAmt} before the invoice completes ${windowDays} days to ensure that the payment is eligible for cash discount.`;
   }
-  return `Please note that a payment of ${cdAmt} is due within the next ${daysBeforeDue} days to avail the ${pct} CD benefit on the invoice.\n\nTo avail the ${pct} CD, please ensure that the payment is made before the invoice completes ${windowDays} days.`;
+  return `${introLine}\n\nTo avail the ${pct} CD, please ensure that the payment is made before the invoice completes ${windowDays} days.`;
 }
 
 function buildCdShortMessage(evaluation: CashDiscountEvaluation, currency = "INR", daysBeforeDue = 5): string {
@@ -186,9 +190,9 @@ function buildCdShortMessage(evaluation: CashDiscountEvaluation, currency = "INR
   const windowDays = evaluation.policy.paymentWindowDays;
 
   if (evaluation.hasOlderUnpaid) {
-    return `To avail ${pct} CD on ${cdAmt || "invoice"}, please clear ${eligAmt} before invoice completes ${windowDays} days.`;
+    return `Payment of ${cdAmt} is due in ${daysBeforeDue} days to avail ${pct} CD on basic value of invoice. To avail CD on ${cdAmt}, please clear ${eligAmt} before invoice completes ${windowDays} days.`;
   }
-  return `Payment of ${cdAmt} is due in ${daysBeforeDue} days to avail ${pct} CD. Ensure payment before ${windowDays} days.`;
+  return `Payment of ${cdAmt} is due in ${daysBeforeDue} days to avail ${pct} CD on basic value of invoice. Ensure payment before ${windowDays} days.`;
 }
 
 function getOlderUnpaidDues(due: DueRecord, allDuesForDealer: DueRecord[]) {
@@ -228,6 +232,12 @@ function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): Pay
 
 function buildReplacements(context: ReminderContext, senderCompany: string) {
   const actualSenderCompany = "ARB Bearings Limited";
+  const extracted = extractDealerCodeAndName(
+    context.due.dealerCode || context.due.customerCode || "",
+    context.due.companyName || ""
+  );
+  const cleanCompanyName = extracted.companyName || context.due.companyName || "";
+  const cleanDealerCode = extracted.dealerCode || context.due.dealerCode || context.due.customerCode || "";
   const billDate = context.due.billDate || context.due.invoiceDate;
   const currentInvoiceDue = context.paymentSummary?.currentInvoiceDue ?? context.due.amount;
   const invoiceAmount = formatCurrency(currentInvoiceDue, context.due.currency);
@@ -269,18 +279,19 @@ function buildReplacements(context: ReminderContext, senderCompany: string) {
     cdMessage: buildCdMessage(context.cdEvaluation, currency, daysBeforeDue),
     cdShortMessage: buildCdShortMessage(context.cdEvaluation, currency, daysBeforeDue),
     cdReason: context.cdEvaluation.reason,
-    companyName: context.due.companyName,
-    company_name: context.due.companyName,
+    companyName: cleanCompanyName,
+    company_name: cleanCompanyName,
     contactName:
       (context.contact.primaryContact && context.contact.primaryContact !== "Accounts Team")
         ? context.contact.primaryContact
-        : (context.due.companyName || "Accounts Team"),
+        : (cleanCompanyName || "Accounts Team"),
     currentInvoiceDueAmount,
     current_invoice_due_amount: currentInvoiceDueAmount,
     daysBeforeDue,
     days_before_due: daysBeforeDue,
-    dealer_name: context.due.companyName,
-    dealerCode: context.due.dealerCode || context.due.customerCode || "",
+    dealer_name: cleanCompanyName,
+    dealerCode: cleanDealerCode,
+    dealer_code: cleanDealerCode,
     dueDate,
     due_date: dueDate,
     invoiceAmount,
@@ -1338,6 +1349,13 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
         };
       }
 
+      const extractedDue = extractDealerCodeAndName(
+        oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+        oldestSelectedDue.companyName || ""
+      );
+      const cleanDueCode = extractedDue.dealerCode || oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "";
+      const cleanDueName = extractedDue.companyName || oldestSelectedDue.companyName || "";
+
       if (!isContactMatched) {
         // Log unmatched dealer reminder for enabled channels
         const channelsToCheck: ReminderLog["channel"][] = ["email", "whatsapp", "sms"];
@@ -1358,7 +1376,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             contactId: "",
             ruleId: rule.id,
             templateId: template.id,
-            dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+            dealerCode: cleanDueCode,
             invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
             reminderDay: rule.triggerDay,
             billAgeDays: oldestSelectedDueAge,
@@ -1373,11 +1391,11 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             scheduledFor,
             status: "failed",
             subject: `${rule.name} reminder - Missing Contact`,
-            content: `Reminder not queued: No matching master contact found in master database for dealer "${oldestSelectedDue.companyName}" (${oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "No Code"}).`,
+            content: `Reminder not queued: No matching master contact found in master database for dealer "${cleanDueName}" (${cleanDueCode || "No Code"}).`,
             failureReason: "No matching master contact found in master database",
             sentAt: "",
             createdAt: new Date().toISOString(),
-            dealerName: oldestSelectedDue.companyName,
+            dealerName: cleanDueName,
             reminderType,
             selectedAgeingStage: stageLabel,
             invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
@@ -1412,7 +1430,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             contactId: contact.id,
             ruleId: rule.id,
             templateId: template.id,
-            dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode || "",
+            dealerCode: cleanDueCode,
             invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
             reminderDay: rule.triggerDay,
             billAgeDays: oldestSelectedDueAge,
@@ -1431,7 +1449,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
             failureReason: `Missing ${channel} contact details in master database`,
             sentAt: "",
             createdAt: new Date().toISOString(),
-            dealerName: oldestSelectedDue.companyName,
+            dealerName: cleanDueName,
             reminderType,
             selectedAgeingStage: stageLabel,
             invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
@@ -1471,7 +1489,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           contactId: contact.id,
           ruleId: rule.id,
           templateId: template.id,
-          dealerCode: oldestSelectedDue.dealerCode || oldestSelectedDue.customerCode,
+          dealerCode: cleanDueCode,
           invoiceNumber: oldestSelectedDue.invoiceNumber || oldestSelectedDue.reference || "",
           reminderDay: rule.triggerDay,
           billAgeDays: oldestSelectedDueAge,
@@ -1490,7 +1508,7 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
           failureReason: "",
           sentAt: "",
           createdAt: new Date().toISOString(),
-          dealerName: oldestSelectedDue.companyName,
+          dealerName: cleanDueName,
           reminderType,
           selectedAgeingStage: stageLabel,
           invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
@@ -1635,6 +1653,13 @@ export async function createManualRemindersForDue(
         content = content.replace(/\b5-day\b/gi, `${daysVal}-day`).replace(/\b5\s+day\b/gi, `${daysVal} day`);
       }
 
+      const extractedDue = extractDealerCodeAndName(
+        due.dealerCode || due.customerCode || "",
+        due.companyName || ""
+      );
+      const cleanDueCode = extractedDue.dealerCode || due.dealerCode || due.customerCode || "";
+      const cleanDueName = extractedDue.companyName || due.companyName || "";
+
       created.push({
         id: randomUUID(),
         ownerId: workspace.workspaceId,
@@ -1643,7 +1668,7 @@ export async function createManualRemindersForDue(
         contactId: contact.id,
         ruleId: rule.id,
         templateId: template.id,
-        dealerCode: due.dealerCode || due.customerCode,
+        dealerCode: cleanDueCode,
         invoiceNumber: due.invoiceNumber || due.reference || "",
         reminderDay: rule.triggerDay,
         billAgeDays,
@@ -1662,7 +1687,7 @@ export async function createManualRemindersForDue(
         failureReason: "",
         sentAt: "",
         createdAt: scheduledFor,
-        dealerName: due.companyName,
+        dealerName: cleanDueName,
         reminderType: rule.name,
         selectedAgeingStage: `Manual Trigger (nominal: ${rule.triggerDay} days)`,
         invoiceIdsInvolved: [due.id],
