@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getMongoDatabase } from "@/lib/mongodb";
+import { buildEmailBody, buildWhatsappBody, buildSubject } from "@/lib/defaults";
 import type { AppDatabase } from "@/lib/types";
 
 const dbPath = path.join(process.cwd(), "data", "app-db.json");
@@ -92,10 +93,10 @@ function ensureAllRulesExist(db: AppDatabase): AppDatabase {
           ownerId,
           ruleId,
           name: `${triggerDay} Day Reminder`,
-          emailSubject: `Invoicing on Hold: Invoice {{invoiceNumber}} — Immediate Attention Required`,
-          emailBody: buildMigratedEmailBody(triggerDay),
-          whatsappBody: buildMigratedWhatsappBody(triggerDay),
-          smsBody: buildMigratedWhatsappBody(triggerDay),
+          emailSubject: buildSubject(triggerDay),
+          emailBody: buildEmailBody(triggerDay),
+          whatsappBody: buildWhatsappBody(triggerDay),
+          smsBody: buildWhatsappBody(triggerDay),
           updatedAt: new Date().toISOString()
         });
       }
@@ -478,91 +479,9 @@ async function ensureDatabaseDocument() {
 }
 
 // ─── Template Migration ───────────────────────────────────────────────────────
-// Runs automatically on every readDatabase() call.
-// Detects old default template format and replaces with new format.
-// Idempotent: new-format templates are never re-migrated.
-
-function buildMigratedEmailBody(triggerDay: number): string {
-  const base = `Dear {{contactName}},\n\n`;
-  const footer = `\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-
-  switch (triggerDay) {
-    case 30:
-      return base +
-        `Please note that a payment of {{amount}} is due within the next 5 days to avail the 3% CD benefit on the invoice.\n\n` +
-        `To avail the 3% CD, please ensure that the payment is made before the invoice completes 30 days.` +
-        footer;
-    case 45:
-      return base +
-        `Please note that a payment of {{amount}} is due within the next 5 days to avail the 2% CD benefit on the invoice.\n\n` +
-        `To avail the 2% CD, please ensure that the payment is made before the invoice completes 45 days.` +
-        footer;
-    case 60:
-      return base +
-        `Please note that a payment of {{amount}} will become due within the next 5 days, and the total outstanding amount is {{totalDueAmount}}.\n\n` +
-        `We kindly request you to arrange payment of the due amount of {{amount}} by/before the due date, as per ARB’s payment terms.` +
-        footer;
-    case 75:
-      return base +
-        `Please note that the payment of {{amount}} against the invoice is now overdue (has exceeded 60 days), and the total outstanding amount is {{totalDueAmount}}.\n\n` +
-        `We kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest.` +
-        footer;
-    case 80:
-      return base +
-        `The payment more than 80 days of amount Rs. {{amount}} is overdue now.\n\nSo kindly arrange to remit us the payment at urgent basis.` +
-        footer;
-    case 85:
-      return `Dear {{contactName}},\n\nThe payment more than 85 days of amount Rs. {{amount}} is significantly overdue.\n\nSo kindly arrange to remit us the payment within the 5 days. If the payment remains pending beyond 90 days from the date of invoice, the future invoicing will be put on hold.\n\nTo avoid any disruption, please ensure to clear this outstanding immediately.\n\nThank you for your prompt corporation in the matter.\n\nRegards,\n{{senderCompany}}`;
-    case 90:
-      return `Dear {{contactName}},\n\nPlease note that the payment of {{amount}} against the invoice is now significantly overdue and has exceeded 90 days.\n\nAs per our company policy, invoicing will remain on temporary hold until the outstanding payment is cleared.\n\nWe kindly request you to arrange payment of the total overdue amount of {{amount}} at the earliest to ensure the continuation of supplies and resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-    case 95:
-      return `Dear {{contactName}},\n\nThe payment more than 95 days of amount Rs. {{amount}} is now 90 days overdue.\n\nAs per our company policy, your invoicing will be put on hold, if the outstanding payment has not been cleared within the 90-day credit period.\n\nSo please arrange to remit the outstanding payment immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-    case 100:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 100 days, amounting to Rs. {{amount}}, is now 95 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-    case 110:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 110 days, amounting to Rs. {{amount}}, is now 105 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-    case 120:
-      return `Dear {{contactName}},\n\nThis is to remind you that the payment more than 120 days, amounting to Rs. {{amount}}, is now 115 days overdue.\n\nYour invoicing has been put on temporary hold due to the outstanding payment. Kindly arrange to clear the outstanding amount immediately to ensure the continuation of supplies and the resumption of invoicing.\n\nThank you for your attention in the matter.\n\nRegards,\nARB Bearings Limited`;
-    default:
-      return ""; // Unknown trigger day — skip migration
-  }
-}
-
-function buildMigratedEmailSubject(triggerDay: number): string {
-  if (triggerDay <= 60) return `Outstanding: Payment more than ${triggerDay} days due in 5 days`;
-  if (triggerDay === 90) return `Critical: Payment more than 90 days — Future Invoicing on Hold`;
-  if (triggerDay >= 100 && triggerDay <= 120) return `Invoicing on Hold: Payment more than ${triggerDay} days — Immediate Attention Required`;
-  return `Overdue: Payment more than ${triggerDay} days — Immediate Attention Required`;
-}
-
-function buildMigratedWhatsappBody(triggerDay: number): string {
-  switch (triggerDay) {
-    case 30:
-      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 3% CD. Ensure payment before 30 days. — ARB Bearings Limited`;
-    case 45:
-      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days to avail 2% CD. Ensure payment before 45 days. — ARB Bearings Limited`;
-    case 60:
-      return `Dear {{contactName}}, payment of {{amount}} is due in 5 days. Total outstanding is {{totalDueAmount}}. Please pay before due date. — ARB Bearings Limited`;
-    case 75:
-      return `Dear {{contactName}}, payment of {{amount}} against invoice is overdue. Total outstanding is {{totalDueAmount}}. Please pay at earliest. — ARB Bearings Limited`;
-    case 80:
-      return `Dear {{contactName}}, payment more than 80 days of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — {{senderCompany}}`;
-    case 85:
-      return `Dear {{contactName}}, payment more than 85 days of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
-    case 90:
-      return `Dear {{contactName}}, payment of {{amount}} is significantly overdue. Invoicing will remain on hold until paid. — ARB Bearings Limited`;
-    case 95:
-      return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be on hold. — ARB Bearings Limited`;
-    case 100:
-      return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing is on hold. — ARB Bearings Limited`;
-    case 110:
-      return `Dear {{contactName}}, payment more than 110 days of Rs. {{amount}} is 105 days overdue. Invoicing is on hold. — {{senderCompany}}`;
-    case 120:
-      return `Dear {{contactName}}, payment more than 120 days of Rs. {{amount}} is 115 days overdue. Invoicing is on hold. — {{senderCompany}}`;
-    default:
-      return ""; // Unknown trigger day — skip migration
-  }
-}
+// Runs automatically on readDatabase() if not yet migrated.
+// Uses canonical templates from @/lib/defaults.
+// Idempotent: templates with userEdited: true are never overwritten.
 
 function migrateTemplates(db: AppDatabase): AppDatabase {
   // Build a map from templateId → rule so we can look up triggerDay per template
@@ -571,7 +490,7 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
   const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100, 110, 120]);
 
   const migratedTemplates = db.templates.map((template) => {
-    const rule = ruleByTemplateId.get(template.id);
+    const rule = ruleByTemplateId.get(template.id) || db.reminderRules.find((r) => r.id === template.ruleId);
     if (!rule) return template; // No linked rule — leave untouched
 
     // If the user has manually edited this template via the admin panel, never overwrite it.
@@ -581,13 +500,13 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
     // Unknown trigger days (custom rules) are left as-is.
     if (!knownTriggerDays.has(rule.triggerDay)) return template;
 
-    const newEmailBody = buildMigratedEmailBody(rule.triggerDay);
-    const newWhatsappBody = buildMigratedWhatsappBody(rule.triggerDay);
+    const newEmailBody = buildEmailBody(rule.triggerDay);
+    const newWhatsappBody = buildWhatsappBody(rule.triggerDay);
     if (!newEmailBody) return template;
 
     return {
       ...template,
-      emailSubject: buildMigratedEmailSubject(rule.triggerDay),
+      emailSubject: buildSubject(rule.triggerDay),
       emailBody: newEmailBody,
       whatsappBody: newWhatsappBody || template.whatsappBody,
       smsBody: newWhatsappBody || template.smsBody
@@ -601,10 +520,10 @@ function migrateCashDiscountPolicies(db: AppDatabase): AppDatabase {
   const migrated = db.cashDiscountPolicies.map((policy) => {
     return {
       ...policy,
-      cdMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-      cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-      cdShortMessageTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date.",
-      cdShortMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD benefit on this invoice, please make payment of total outstanding along with the current invoice by/before the due date."
+      cdMessageTemplate: "Please note that a payment of {{cdAmount}} is due within the next {{daysBeforeDue}} days to avail the {{cdDiscountPercent}}% CD benefit on the invoice.\n\nTo avail the {{cdDiscountPercent}}% CD, please ensure that the payment is made before the invoice completes {{paymentWindowDays}} days.",
+      cdMessageWithOlderTemplate: "To avail the {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before the invoice completes {{paymentWindowDays}} days to ensure that the payment is eligible for cash discount.",
+      cdShortMessageTemplate: "Payment of {{cdAmount}} is due in {{daysBeforeDue}} days to avail {{cdDiscountPercent}}% CD. Ensure payment before {{paymentWindowDays}} days.",
+      cdShortMessageWithOlderTemplate: "To avail {{cdDiscountPercent}}% CD on {{cdAmount}}, please clear {{eligibleAmount}} before invoice completes {{paymentWindowDays}} days."
     };
   });
   return { ...db, cashDiscountPolicies: migrated };
@@ -634,8 +553,8 @@ export function readDatabase(): Promise<AppDatabase> {
       // Normalize then apply auto-migration for cash discount policies
       const normalized = migrateCashDiscountPolicies(normalizeDatabase(appDatabase));
       
-      // If templatesMigrated has not been run, run it once, save it back, and mark it done.
-      const hasMigrated = (document as any).templatesMigratedV2 === true;
+      // If templatesMigrated has not been run for V3, run it once, save it back, and mark it done.
+      const hasMigrated = (document as any).templatesMigratedV3 === true;
       if (!hasMigrated) {
         const migrated = migrateTemplates(normalized);
         // Write back immediately to mark as migrated
@@ -644,7 +563,8 @@ export function readDatabase(): Promise<AppDatabase> {
           {
             $set: {
               templates: migrated.templates,
-              templatesMigratedV2: true,
+              cashDiscountPolicies: migrated.cashDiscountPolicies,
+              templatesMigratedV3: true,
               updatedAt: new Date().toISOString()
             }
           }
