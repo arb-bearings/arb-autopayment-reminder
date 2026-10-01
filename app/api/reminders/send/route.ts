@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import {
   canDispatchReminders,
@@ -8,7 +8,28 @@ import { recordAuditLog } from "@/lib/audit";
 import { createManualRemindersForDues, sendPendingReminders } from "@/lib/reminder-engine";
 import { sendDailyActivityReport, sendSalespersonSummaries } from "@/lib/reports";
 
-export async function POST(request: Request) {
+function makeRedirect(url: URL | string, reminderCount: number, status = 303) {
+  const res = NextResponse.redirect(url, { status });
+  res.headers.set("x-reminder-count", String(reminderCount));
+  res.headers.set("access-control-expose-headers", "x-reminder-count");
+  return res;
+}
+
+function makeResponse(
+  request: NextRequest | Request,
+  redirectPath: string,
+  reminderCount: number
+) {
+  const isClientFetch = (request.headers.get("x-queue-fetch") === "1");
+  const redirectUrl = new URL(redirectPath, request.url).toString();
+  if (isClientFetch) {
+    return NextResponse.json({ count: reminderCount, redirectUrl }, { status: 200 });
+  }
+  return makeRedirect(redirectUrl, reminderCount);
+}
+
+
+export async function POST(request: NextRequest) {
   const user = await requireUser();
   const formData = await request.formData();
   const dueId = String(formData.get("dueId") || "").trim();
@@ -61,14 +82,12 @@ export async function POST(request: Request) {
         `Manual dispatch processed ${logs.length} reminders, sent ${salespersonSummaries.length} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
       );
 
-      return NextResponse.redirect(
-        new URL(
-          `/dashboard/dues?message=${encodeURIComponent(
-            `Sent ${logs.length} manual reminder${logs.length === 1 ? "" : "s"} for ${selectedDueIds.length} selected invoice${selectedDueIds.length === 1 ? "" : "s"}, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
-          )}`,
-          request.url
-        ),
-        { status: 303 }
+      return makeResponse(
+        request,
+        `/dashboard/dues?message=${encodeURIComponent(
+          `Sent ${logs.length} manual reminder${logs.length === 1 ? "" : "s"} for ${selectedDueIds.length} selected invoice${selectedDueIds.length === 1 ? "" : "s"}, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+        )}`,
+        logs.length
       );
     }
 
@@ -89,14 +108,12 @@ export async function POST(request: Request) {
       "success",
       `Processed ${logs.length} pending reminders, sent ${salespersonSummaries.length} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
     );
-    return NextResponse.redirect(
-      new URL(
-        `/dashboard/dues?message=${encodeURIComponent(
-          `Processed ${logs.length} pending reminders, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
-        )}`,
-        request.url
-      ),
-      { status: 303 }
+    return makeResponse(
+      request,
+      `/dashboard/dues?message=${encodeURIComponent(
+        `Processed ${logs.length} pending reminders, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+      )}`,
+      logs.length
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sending reminders failed.";
@@ -104,6 +121,9 @@ export async function POST(request: Request) {
       await recordAuditLog(user, "Reminder Dispatch", "failed", message);
     } catch (auditError) {
       console.error("Failed to record audit log:", auditError);
+    }
+    if (request.headers.get("x-queue-fetch") === "1") {
+      return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.redirect(
       new URL(`/dashboard/dues?error=${encodeURIComponent(message)}`, request.url),

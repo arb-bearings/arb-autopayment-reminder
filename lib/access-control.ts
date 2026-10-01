@@ -29,7 +29,7 @@ export function canUploadDueDatabase(user: Pick<User, "role">) {
 }
 
 export function canDispatchReminders(user: Pick<User, "role" | "canSendManualReminders">) {
-  return isAdminLikeUser(user) || user.canSendManualReminders;
+  return isAdminLikeUser(user) || user.role === "user" || user.canSendManualReminders;
 }
 
 export function canAccessReports(user: Pick<User, "role">) {

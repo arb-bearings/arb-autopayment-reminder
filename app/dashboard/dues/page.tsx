@@ -4,6 +4,8 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { GenerationDateField } from "@/components/generation-date-field";
 import { ProtectedSubmitButton } from "@/components/protected-submit-button";
 import { TableSearch } from "@/components/table-search";
+import { SectionJump } from "@/components/section-jump";
+import { SendQueueButton } from "@/components/send-queue-button";
 import { filterSharedCompanyRecords, getCompanyWorkspaceContextForUser } from "@/lib/company-workspace";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 import { GroupedDuesTable } from "@/components/grouped-dues-table";
@@ -73,8 +75,18 @@ export default async function DuesPage({
     >
       <StatusBar params={params} />
 
+      <SectionJump
+        sections={[
+          { id: "dues-upload", label: "Upload Dues Excel" },
+          { id: "dues-dispatch", label: "Dispatch from Dues" },
+          { id: "dues-review", label: "Review Dues & Dispatch Selected" },
+          { id: "reminder-queue", label: "Reminder Queue" },
+          { id: "dues-edit", label: "Edit Outside the App" },
+        ]}
+      />
+
       <section className="content-grid">
-        <article className="glass-panel">
+        <article id="dues-upload" className="glass-panel">
           <div className="section-heading">
             <h2>Upload dues Excel</h2>
             <p>
@@ -129,7 +141,7 @@ export default async function DuesPage({
           ) : null}
         </article>
 
-        <article className="glass-panel">
+        <article id="dues-dispatch" className="glass-panel">
           <div className="section-heading">
             <h2>Dispatch from dues</h2>
             <p>
@@ -145,8 +157,8 @@ export default async function DuesPage({
             </p>
           ) : !canDispatch ? (
             <p className="muted-copy">
-              Your user role is view-only for dispatch. A Super Admin can grant manual reminder
-              permission from User Management.
+              Your account does not have permission to generate or send reminders. Contact a Super
+              Admin to enable dispatch access.
             </p>
           ) : (
             <div className="stacked-layout">
@@ -166,20 +178,19 @@ export default async function DuesPage({
               />
 
               <div className="dispatch-form">
-                <ProtectedSubmitButton
+                <SendQueueButton
                   form="send-queue-form"
                   className="button"
                   confirmationMessage="Send every pending reminder currently in the queue?"
-                  promptOnSubmitOnly={true}
                 >
                   Send generated queue
-                </ProtectedSubmitButton>
+                </SendQueueButton>
               </div>
             </div>
           )}
         </article>
 
-        <article className="glass-panel rule-span">
+        <article id="dues-review" className="glass-panel rule-span">
           <div className="section-heading">
             <h2>Review dues and dispatch selected records</h2>
             <p>
@@ -278,7 +289,7 @@ export default async function DuesPage({
           </form>
         </article>
 
-        <article className="glass-panel rule-span">
+        <article id="dues-edit" className="glass-panel rule-span">
           <div className="section-heading">
             <h2>Edit outside the app</h2>
             <p>
