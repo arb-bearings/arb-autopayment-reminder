@@ -1,5 +1,6 @@
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ProtectedSubmitButton } from "@/components/protected-submit-button";
+import { PasswordInput } from "@/components/password-input";
 import { operationPasswordLabels, requireSuperAdminUser } from "@/lib/access-control";
 import { getCompanyWorkspaceContextForUser } from "@/lib/company-workspace";
 import { readDatabase } from "@/lib/storage";
@@ -46,7 +47,7 @@ export default async function PasswordManagementPage({
               <span>
                 {operationPasswordLabels[key]} {configured.has(key) ? "(configured)" : "(not set)"}
               </span>
-              <input name={key} type="password" minLength={8} placeholder="At least 8 characters" />
+              <PasswordInput name={key} minLength={8} placeholder="At least 8 characters" />
               <small className="field-help">Use 8 or more characters.</small>
             </label>
           ))}

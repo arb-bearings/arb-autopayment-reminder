@@ -27,6 +27,7 @@ export function ProtectedSubmitButton({
   const [isDirty, setIsDirty] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalPassword, setModalPassword] = useState("");
+  const [showModalPw, setShowModalPw] = useState(false);
   const initialFormValuesRef = useRef<Map<string, string | boolean>>(new Map());
 
   // Capture initial snapshot of form fields
@@ -199,22 +200,46 @@ export function ProtectedSubmitButton({
             </div>
 
             <div className="unsaved-changes-actions">
-              <input
-                type="password"
-                className="unsaved-password-input"
-                placeholder="Enter password..."
-                value={modalPassword}
-                onChange={(e) => setModalPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (modalPassword.trim()) {
-                      submitWithPassword(modalPassword.trim());
+              <div className="password-input-wrap">
+                <input
+                  type={showModalPw ? "text" : "password"}
+                  className="unsaved-password-input"
+                  style={{ width: "100%", paddingRight: "2.8rem" }}
+                  placeholder="Enter password..."
+                  value={modalPassword}
+                  onChange={(e) => setModalPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (modalPassword.trim()) {
+                        submitWithPassword(modalPassword.trim());
+                      }
                     }
-                  }
-                }}
-                autoFocus
-              />
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="password-eye-btn"
+                  style={{ top: "50%", transform: "translateY(-50%)" }}
+                  onClick={() => setShowModalPw((v) => !v)}
+                  aria-label={showModalPw ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showModalPw ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
               <button
                 type="button"
                 className="button button-ghost"
@@ -236,6 +261,7 @@ export function ProtectedSubmitButton({
               </button>
             </div>
           </div>
+
         </>
       )}
 

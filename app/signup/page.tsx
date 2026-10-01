@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PasswordInput } from "@/components/password-input";
 
 export default function SignupPage({
   searchParams
@@ -62,7 +63,7 @@ export default function SignupPage({
 
             <label className="field">
               <span>Password</span>
-              <input name="password" type="password" minLength={8} required />
+              <PasswordInput name="password" minLength={8} required />
             </label>
 
             <button className="button full-width" type="submit">
