@@ -118,7 +118,7 @@ export default async function MasterDatabasePage({
                     <th>Dealer code</th>
                     <th>Company</th>
                     <th>Primary contact</th>
-                    <th>Salesperson</th>
+                    <th>Manager</th>
                     <th>Email</th>
                     <th>WhatsApp</th>
                     <th>Updated</th>

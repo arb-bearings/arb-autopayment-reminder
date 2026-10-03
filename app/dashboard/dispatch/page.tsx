@@ -8,6 +8,7 @@ import {
   getCompanyWorkspaceContextForUser
 } from "@/lib/company-workspace";
 import { isAdminUser, requireUser } from "@/lib/auth";
+import { canDispatchReminders } from "@/lib/access-control";
 import { resolveDispatchSettings } from "@/lib/dispatch-settings";
 import { readDatabase } from "@/lib/storage";
 import { formatDate } from "@/lib/utils";
@@ -24,6 +25,7 @@ export default async function DispatchPage({
   const user = await requireUser();
   const [database, params] = await Promise.all([readDatabase(), searchParams]);
   const isAdmin = isAdminUser(user);
+  const canDispatch = canDispatchReminders(user);
   const workspace = getCompanyWorkspaceContextForUser(database, user);
 
   const settings = resolveDispatchSettings(
@@ -61,6 +63,8 @@ export default async function DispatchPage({
       companyName={user.companyName}
       userName={user.name}
       isAdmin={isAdmin}
+      userRole={user.role}
+      canSendManualReminders={user.canSendManualReminders}
     >
       <section className="dispatch-shell">
         <StatusBar params={params} />
@@ -137,6 +141,12 @@ export default async function DispatchPage({
               </p>
             </div>
 
+            {!canDispatch ? (
+              <p className="dispatch-note dispatch-note-plain">
+                Your account does not have permission to generate or send reminders. Contact a
+                Super Admin to enable dispatch access.
+              </p>
+            ) : (
             <div className="dispatch-action-stack">
               <form action="/api/reminders/generate" method="post" className="dispatch-form">
                 <input type="hidden" name="forceAllRules" value="true" />
@@ -163,6 +173,7 @@ export default async function DispatchPage({
                 </ProtectedSubmitButton>
               </div>
             </div>
+            )}
           </article>
         </section>
 

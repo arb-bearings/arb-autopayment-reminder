@@ -17,12 +17,13 @@ export async function POST(request: Request) {
     employeeId: String(formData.get("employeeId") || "").trim(),
     email: String(formData.get("email") || "").trim(),
     phoneNumber: String(formData.get("phoneNumber") || "").trim(),
+    backOfficeEmail: String(formData.get("backOfficeEmail") || "").trim(),
     dealerCodes: parseDealerCodeList(String(formData.get("dealerCodes") || ""))
   };
 
   if (!payload.name || !payload.employeeId || !payload.email) {
     return NextResponse.redirect(
-      new URL("/dashboard/settings/salespersons?error=Salesperson%20name,%20employee%20ID,%20and%20email%20are%20required.", request.url),
+      new URL("/dashboard/managers?error=Manager%20name,%20employee%20ID,%20and%20email%20are%20required.", request.url),
       { status: 303 }
     );
   }
@@ -59,14 +60,14 @@ export async function POST(request: Request) {
     await recordAuditLog(user, "Salesperson Configuration", "success", payload.name);
 
     return NextResponse.redirect(
-      new URL("/dashboard/settings/salespersons?message=Salesperson%20saved.", request.url),
+      new URL("/dashboard/managers?message=Manager%20saved.", request.url),
       { status: 303 }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Salesperson save failed.";
     await recordAuditLog(user, "Salesperson Configuration", "failed", message);
     return NextResponse.redirect(
-      new URL(`/dashboard/settings/salespersons?error=${encodeURIComponent(message)}`, request.url),
+      new URL(`/dashboard/managers?error=${encodeURIComponent(message)}`, request.url),
       { status: 303 }
     );
   }

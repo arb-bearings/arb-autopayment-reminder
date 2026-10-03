@@ -12,7 +12,6 @@ const sections = [
   { label: "Database Settings", href: "/dashboard/settings/database", superAdminOnly: false },
   { label: "Reminder Settings", href: "/dashboard/settings/reminders", superAdminOnly: false },
   { label: "Message Templates", href: "/dashboard/settings/templates", superAdminOnly: false },
-  { label: "Salesperson Configuration", href: "/dashboard/settings/salespersons", superAdminOnly: false },
   { label: "Email Configuration", href: "/dashboard/settings/email", superAdminOnly: false },
   { label: "Reports & Analytics", href: "/dashboard/settings/reports", superAdminOnly: false },
   { label: "System Logs", href: "/dashboard/settings/logs", superAdminOnly: false }

@@ -87,6 +87,8 @@ const masterFieldCandidates = {
     "contact name",
     "person",
     "contact person name",
+    "party contact person name",
+    "party contact person nam",
     "contact"
   ],
   email: [
@@ -110,6 +112,7 @@ const masterFieldCandidates = {
     "whatsapp no.",
     "whatsapp mobile",
     "mobile no by marketing",
+    "mobile no by marketi",
     "mobile number by marketing",
     "mobile by marketing",
     "phone by marketing",
@@ -118,10 +121,10 @@ const masterFieldCandidates = {
   ],
   sms: [
     "sms",
-    "phone",
-    "phone number",
     "phone no",
     "phone no.",
+    "phone number",
+    "phone",
     "mobile",
     "mobile number",
     "mobile no",
@@ -129,6 +132,7 @@ const masterFieldCandidates = {
     "contact number",
     "contact no",
     "mobile no by marketing",
+    "mobile no by marketi",
     "mobile number by marketing",
     "mobile by marketing",
     "phone by marketing",
@@ -137,9 +141,60 @@ const masterFieldCandidates = {
   ],
   alternateContact: ["alternate contact", "secondary contact", "alt contact", "alternate number"],
   notes: ["notes", "remarks", "comment"],
-  salespersonId: ["salesperson id", "sales person id", "employee id", "sales employee id"],
-  salespersonName: ["salesperson", "salesperson name", "sales person", "sales person name"],
-  salespersonEmail: ["salesperson email", "sales person email", "sales email"]
+  salespersonId: [
+    "salesperson id",
+    "sales person id",
+    "employee id",
+    "sales employee id",
+    "manager code",
+    "manager coi",
+    "manager co",
+    "manager co i",
+    "manager id",
+    "manger code",
+    "manger coi",
+    "manger co",
+    "manger id"
+  ],
+  salespersonName: [
+    "salesperson",
+    "salesperson name",
+    "sales person",
+    "sales person name",
+    "manager name",
+    "manager",
+    "manger name",
+    "manger"
+  ],
+  salespersonEmail: [
+    "salesperson email",
+    "sales person email",
+    "sales email",
+    "manger mail id",
+    "manager mail id",
+    "manger email id",
+    "manager email id",
+    "manger email",
+    "manager email",
+    "manger mail",
+    "manager mail"
+  ],
+  backOfficeEmail: [
+    "back office mail id",
+    "back office mail ie",
+    "back office mail",
+    "back office email",
+    "back office email id",
+    "backoffice mail id",
+    "backoffice mail",
+    "backoffice email",
+    "backoffice email id",
+    "back office",
+    "backoffice",
+    "back office mailid",
+    "back office e mail",
+    "backoffice e mail"
+  ]
 } as const;
 
 const dueFieldCandidates = {
@@ -279,6 +334,9 @@ const salespersonFieldCandidates = {
     "sales person",
     "name",
     "manager name",
+    "manager",
+    "manger name",
+    "manger",
     "executive name"
   ],
   employeeId: [
@@ -288,6 +346,11 @@ const salespersonFieldCandidates = {
     "staff id",
     "id",
     "manager code",
+    "manager coi",
+    "manager co",
+    "manger code",
+    "manger coi",
+    "manger co",
     "executive code"
   ],
   email: [
@@ -298,13 +361,32 @@ const salespersonFieldCandidates = {
     "mail",
     "manger mail id",
     "manager mail id",
-    "executive mail id",
     "manger email id",
     "manager email id",
-    "executive email id",
-    "back office mail id"
+    "manger email",
+    "manager email",
+    "manger mail",
+    "manager mail",
+    "executive mail id",
+    "executive email id"
   ],
   phoneNumber: ["phone", "phone number", "mobile", "mobile number", "contact number"],
+  backOfficeEmail: [
+    "back office mail id",
+    "back office mail ie",
+    "back office mail",
+    "back office email",
+    "back office email id",
+    "backoffice mail id",
+    "backoffice mail",
+    "backoffice email",
+    "backoffice email id",
+    "back office",
+    "backoffice",
+    "back office mailid",
+    "back office e mail",
+    "backoffice e mail"
+  ],
   dealerCodes: [
     "dealers",
     "dealer codes",
@@ -1154,6 +1236,7 @@ export function mapMasterRows(rows: RawRow[], ownerId: string) {
         salespersonId: toText(pickValue(row, masterFieldCandidates.salespersonId)),
         salespersonName: toText(pickValue(row, masterFieldCandidates.salespersonName)),
         salespersonEmail: toText(pickValue(row, masterFieldCandidates.salespersonEmail)),
+        backOfficeEmail: toText(pickValue(row, masterFieldCandidates.backOfficeEmail)),
         importedAt,
         raw: Object.fromEntries(
           Object.entries(row).map(([key, value]) => [key, toText(value)])
@@ -1287,6 +1370,7 @@ export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
       const employeeId = toText(pickValue(row, salespersonFieldCandidates.employeeId));
       const email = toText(pickValue(row, salespersonFieldCandidates.email));
       const phoneNumber = toText(pickValue(row, salespersonFieldCandidates.phoneNumber));
+      const backOfficeEmail = toText(pickValue(row, salespersonFieldCandidates.backOfficeEmail));
       const dealerCodes = parseDealerCodeList(
         toText(pickValue(row, salespersonFieldCandidates.dealerCodes))
       );
@@ -1296,6 +1380,7 @@ export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
         employeeId: employeeId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         email,
         phoneNumber,
+        backOfficeEmail,
         dealerCodes
       };
     })
@@ -1306,6 +1391,7 @@ export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
     employeeId: string;
     email: string;
     phoneNumber: string;
+    backOfficeEmail: string;
     dealerCodesSet: Set<string>;
   }>();
 
@@ -1317,12 +1403,16 @@ export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
       if (!existing.phoneNumber && entry.phoneNumber) {
         existing.phoneNumber = entry.phoneNumber;
       }
+      if (!existing.backOfficeEmail && entry.backOfficeEmail) {
+        existing.backOfficeEmail = entry.backOfficeEmail;
+      }
     } else {
       groupedMap.set(key, {
         name: entry.name,
         employeeId: entry.employeeId,
         email: entry.email,
         phoneNumber: entry.phoneNumber,
+        backOfficeEmail: entry.backOfficeEmail,
         dealerCodesSet: new Set(entry.dealerCodes)
       });
     }
@@ -1335,6 +1425,7 @@ export function mapSalespersonRows(rows: RawRow[], ownerId: string) {
     employeeId: grouped.employeeId,
     email: grouped.email,
     phoneNumber: grouped.phoneNumber,
+    backOfficeEmail: grouped.backOfficeEmail || "",
     dealerCodes: Array.from(grouped.dealerCodesSet),
     createdAt: importedAt,
     updatedAt: importedAt

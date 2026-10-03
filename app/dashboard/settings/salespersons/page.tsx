@@ -21,8 +21,8 @@ export default async function SalespersonPage({
 
   return (
     <DashboardShell
-      title="Salesperson configuration"
-      description="Manage salesperson profiles and dealer-code mappings."
+      title="Manager configuration"
+      description="Manage manager profiles, dealer-code mappings, and back office CC settings."
       companyName={user.companyName}
       userName={user.name}
       isAdmin
@@ -34,9 +34,9 @@ export default async function SalespersonPage({
       <section className="content-grid">
         <article className="glass-panel">
           <div className="section-heading">
-            <h2>Upload salesperson file</h2>
+            <h2>Upload manager file</h2>
             <p>
-              Import salesperson name, email, and assigned dealer codes. Use the sample file to
+              Import manager name, email, back office CC email, and assigned dealer codes. Use the sample file to
               test reports with all emails routed to amankumarschool7@gmail.com.
             </p>
           </div>
@@ -53,13 +53,13 @@ export default async function SalespersonPage({
             <label className="field">
               <span>Import mode</span>
               <select name="mode" defaultValue="replace">
-                <option value="replace">Replace current salesperson mappings</option>
-                <option value="append">Append or update matching salespersons</option>
+                <option value="replace">Replace current manager mappings</option>
+                <option value="append">Append or update matching managers</option>
               </select>
             </label>
             <div className="button-row">
               <ProtectedSubmitButton className="button">
-                Upload salesperson file
+                Upload manager file
               </ProtectedSubmitButton>
               <a className="button button-secondary" href="/api/salespersons/sample">
                 Download sample Excel
@@ -70,21 +70,21 @@ export default async function SalespersonPage({
 
         <article className="glass-panel">
           <div className="section-heading">
-            <h2>Add salesperson</h2>
+            <h2>Add manager</h2>
             <p>Dealer codes can be entered one per line or comma-separated.</p>
           </div>
           <form action="/api/salespersons/save" method="post" className="form-stack">
             <input type="hidden" name="salespersonId" value="" />
             <label className="field">
-              <span>Salesperson name</span>
+              <span>Manager name</span>
               <input name="name" required />
             </label>
             <label className="field">
-              <span>Employee ID</span>
+              <span>Manager Code (Employee ID)</span>
               <input name="employeeId" required />
             </label>
             <label className="field">
-              <span>Email</span>
+              <span>Manager email</span>
               <input name="email" type="email" required />
             </label>
             <label className="field">
@@ -92,19 +92,23 @@ export default async function SalespersonPage({
               <input name="phoneNumber" />
             </label>
             <label className="field">
+              <span>Back office CC email</span>
+              <input name="backOfficeEmail" type="email" placeholder="e.g. sales@arb-bearings.com" />
+            </label>
+            <label className="field">
               <span>Dealer codes</span>
               <textarea name="dealerCodes" rows={6} />
             </label>
             <ProtectedSubmitButton className="button">
-              Save salesperson
+              Save manager
             </ProtectedSubmitButton>
           </form>
         </article>
 
         <article className="glass-panel rule-span">
           <div className="section-heading">
-            <h2>Current mappings</h2>
-            <p>{salespersons.length} salesperson profiles configured.</p>
+            <h2>Current manager mappings</h2>
+            <p>{salespersons.length} manager profiles configured.</p>
           </div>
           <TableSearch />
           <div className="table-wrap">
@@ -112,9 +116,10 @@ export default async function SalespersonPage({
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Employee ID</th>
+                  <th>Manager Code</th>
                   <th>Email</th>
                   <th>Phone</th>
+                  <th>Back Office CC</th>
                   <th>Dealers</th>
                   <th>Action</th>
                 </tr>
@@ -122,7 +127,7 @@ export default async function SalespersonPage({
               <tbody>
                 {salespersons.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No salespersons configured.</td>
+                    <td colSpan={7}>No managers configured.</td>
                   </tr>
                 ) : (
                   salespersons.map((entry) => (
@@ -131,6 +136,7 @@ export default async function SalespersonPage({
                       <td>{entry.employeeId}</td>
                       <td>{entry.email}</td>
                       <td>{entry.phoneNumber || "-"}</td>
+                      <td>{entry.backOfficeEmail || "-"}</td>
                       <td>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", maxWidth: "450px" }}>
                           {entry.dealerCodes.map((code) => (
@@ -154,7 +160,7 @@ export default async function SalespersonPage({
                             <input type="hidden" name="salespersonId" value={entry.id} />
                             <ProtectedSubmitButton
                               className="button button-ghost"
-                              confirmationMessage={`Delete salesperson ${entry.name}?`}
+                              confirmationMessage={`Delete manager ${entry.name}?`}
                             >
                               Delete
                             </ProtectedSubmitButton>
@@ -174,7 +180,7 @@ export default async function SalespersonPage({
         <div className="modal-overlay">
           <div className="modal-content animate-slide-up">
             <div className="modal-header">
-              <h2>Edit Salesperson</h2>
+              <h2>Edit Manager</h2>
               <a href="/dashboard/settings/salespersons" className="modal-close-btn" aria-label="Close">
                 &times;
               </a>
@@ -182,15 +188,15 @@ export default async function SalespersonPage({
             <form action="/api/salespersons/save" method="post" className="form-stack">
               <input type="hidden" name="salespersonId" value={editSalesperson.id} />
               <label className="field">
-                <span>Salesperson name</span>
+                <span>Manager name</span>
                 <input name="name" defaultValue={editSalesperson.name} required autoFocus />
               </label>
               <label className="field">
-                <span>Employee ID</span>
+                <span>Manager Code (Employee ID)</span>
                 <input name="employeeId" defaultValue={editSalesperson.employeeId} required />
               </label>
               <label className="field">
-                <span>Email</span>
+                <span>Manager email</span>
                 <input name="email" type="email" defaultValue={editSalesperson.email} required />
               </label>
               <label className="field">
@@ -198,12 +204,21 @@ export default async function SalespersonPage({
                 <input name="phoneNumber" defaultValue={editSalesperson.phoneNumber || ""} />
               </label>
               <label className="field">
+                <span>Back office CC email</span>
+                <input
+                  name="backOfficeEmail"
+                  type="email"
+                  defaultValue={editSalesperson.backOfficeEmail || ""}
+                  placeholder="e.g. sales@arb-bearings.com"
+                />
+              </label>
+              <label className="field">
                 <span>Dealer codes</span>
                 <textarea name="dealerCodes" rows={4} defaultValue={editSalesperson.dealerCodes.join("\n")} placeholder="One dealer code per line" />
               </label>
               <div className="button-row" style={{ marginTop: 20 }}>
                 <ProtectedSubmitButton className="button">
-                  Update salesperson
+                  Update manager
                 </ProtectedSubmitButton>
                 <a className="button button-secondary" href="/dashboard/settings/salespersons">
                   Cancel

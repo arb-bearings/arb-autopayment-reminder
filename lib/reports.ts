@@ -55,7 +55,8 @@ async function sendReportEmail(
   subject: string,
   text: string,
   html?: string,
-  attachments?: any[]
+  attachments?: any[],
+  cc?: string[]
 ) {
   if (to.length === 0) {
     return { skipped: true, recipientCount: 0 };
@@ -83,6 +84,7 @@ async function sendReportEmail(
   await transporter.sendMail({
     from: settings.senderEmail || settings.smtpFrom,
     to,
+    cc: cc && cc.length > 0 ? cc : undefined,
     subject,
     text,
     html,
@@ -821,16 +823,25 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
     (sp) => workspace.sharedOwnerIds.has(sp.ownerId) || sp.ownerId === workspace.configOwnerId
   );
 
-  // Collect map of salesperson email -> { name, email, phone, records }
-  const salespersonMap = new Map<string, { name: string; email: string; phone?: string; records: DueRecord[] }>();
+  // Collect map of salesperson email -> { name, email, phone, backOfficeEmail, records }
+  const salespersonMap = new Map<
+    string,
+    {
+      name: string;
+      email: string;
+      phone?: string;
+      backOfficeEmail?: string;
+      records: DueRecord[];
+    }
+  >();
 
   // 1. From database.salespersons
   for (const sp of configuredSalespersons) {
     const emailKey = sp.email.trim().toLowerCase();
     if (!emailKey) continue;
-    const normalizedDealerCodes = (sp.dealerCodes || []).map(code => code.trim().toLowerCase());
+    const normalizedDealerCodes = (sp.dealerCodes || []).map((code) => code.trim().toLowerCase());
 
-    const assignedDues = dues.filter(due => {
+    const assignedDues = dues.filter((due) => {
       const dueDealerCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
       const matchCode = normalizedDealerCodes.includes(dueDealerCode);
       const matchEmail = (due.salespersonEmail || "").trim().toLowerCase() === emailKey;
@@ -838,12 +849,27 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
       return matchCode || matchEmail || matchName;
     });
 
-    salespersonMap.set(emailKey, {
-      name: sp.name,
-      email: sp.email,
-      phone: sp.phoneNumber,
-      records: assignedDues
-    });
+    const existing = salespersonMap.get(emailKey);
+    if (existing) {
+      const idSet = new Set(existing.records.map((r) => r.id));
+      for (const r of assignedDues) {
+        if (!idSet.has(r.id)) {
+          existing.records.push(r);
+          idSet.add(r.id);
+        }
+      }
+      if (!existing.backOfficeEmail && sp.backOfficeEmail?.trim()) {
+        existing.backOfficeEmail = sp.backOfficeEmail.trim();
+      }
+    } else {
+      salespersonMap.set(emailKey, {
+        name: sp.name,
+        email: sp.email.trim(),
+        phone: sp.phoneNumber,
+        backOfficeEmail: sp.backOfficeEmail?.trim(),
+        records: assignedDues
+      });
+    }
   }
 
   // 2. From dues with salespersonEmail that might not be in database.salespersons
@@ -895,13 +921,59 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         }
       ];
 
+      // Resolve back office email to CC on manager summary
+      const backOfficeEmail = (() => {
+        if (spData.backOfficeEmail?.trim()) {
+          return spData.backOfficeEmail.trim();
+        }
+        const spRecord = configuredSalespersons.find(
+          (sp) => sp.email.trim().toLowerCase() === emailKey && sp.backOfficeEmail?.trim()
+        );
+        if (spRecord?.backOfficeEmail?.trim()) {
+          return spRecord.backOfficeEmail.trim();
+        }
+        const assignedDealerCodes = new Set(
+          records.map((d) => (d.dealerCode || d.customerCode || "").trim().toLowerCase())
+        );
+        const contacts = filterSharedCompanyRecords(database.masterContacts, workspace.sharedOwnerIds);
+        const matchingContact = contacts.find((c) => {
+          const contactDealer = (c.dealerCode || c.customerCode || "").trim().toLowerCase();
+          const hasEmailMatch = (c.salespersonEmail || "").trim().toLowerCase() === emailKey;
+          const hasDealerMatch = contactDealer && assignedDealerCodes.has(contactDealer);
+          const hasBo = Boolean(
+            c.backOfficeEmail?.trim() ||
+            (c.raw && (
+              c.raw["back office mail id"] ||
+              c.raw["back office mail ie"] ||
+              c.raw["back office email"] ||
+              c.raw["backoffice mail id"]
+            ))
+          );
+          return (hasEmailMatch || hasDealerMatch) && hasBo;
+        });
+
+        return (
+          matchingContact?.backOfficeEmail?.trim() ||
+          (matchingContact?.raw && (
+            matchingContact.raw["back office mail id"] ||
+            matchingContact.raw["back office mail ie"] ||
+            matchingContact.raw["back office email"] ||
+            matchingContact.raw["backoffice mail id"]
+          )) ||
+          ""
+        ).trim();
+      })();
+
+      const ccList = backOfficeEmail ? [backOfficeEmail] : undefined;
+
       const result = await sendReportEmail(
         settings,
         [email],
-        `Reminder Summary - ${name}`,
+        `Manager Summary - ${name}`,
         buildSalespersonSummaryText(name, records, salespersonLogs, database.reminderRules),
         buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules),
-        attachments
+        attachments,
+        ccList
       );
       results.push({ email, ...result });
 
