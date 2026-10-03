@@ -1644,22 +1644,30 @@ async function sendEmail(
   settings: DispatchSettings,
   due?: DueRecord,
   allDuesForDealer: DueRecord[] = [],
-  database?: any
+  database?: any,
+  existingTransporter?: nodemailer.Transporter
 ) {
-  const transporter = nodemailer.createTransport({
-    host: settings.smtpHost,
-    port: settings.smtpPort,
-    secure: settings.smtpSecure,
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    auth: settings.smtpUser
-      ? {
-          user: settings.smtpUser,
-          pass: settings.smtpPass
-        }
-      : undefined
-  });
+  const transporter =
+    existingTransporter ||
+    nodemailer.createTransport({
+      pool: true,
+      host: settings.smtpHost,
+      port: settings.smtpPort,
+      secure: settings.smtpSecure,
+      maxConnections: 1,
+      maxMessages: 200,
+      rateDelta: 1000,
+      rateLimit: 1,
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
+      auth: settings.smtpUser
+        ? {
+            user: settings.smtpUser,
+            pass: settings.smtpPass
+          }
+        : undefined
+    });
 
   const recipients = parseEmailList(log.recipient);
   const to = recipients.length > 0 ? recipients : log.recipient;
@@ -1685,6 +1693,10 @@ async function sendEmail(
     text: log.content,
     html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content)
   });
+
+  if (!existingTransporter) {
+    transporter.close();
+  }
 }
 
 async function postWebhook(url: string, log: ReminderLog) {
@@ -1909,7 +1921,8 @@ async function deliverReminder(
   settings: DispatchSettings,
   due?: DueRecord,
   allDuesForDealer: DueRecord[] = [],
-  database?: any
+  database?: any,
+  existingTransporter?: nodemailer.Transporter
 ) {
   if (log.channel === "email") {
     if (!isValidEmailAddress(log.recipient)) {
@@ -1920,7 +1933,7 @@ async function deliverReminder(
       throw new Error("SMTP settings are incomplete.");
     }
 
-    await sendEmail(log, settings, due, allDuesForDealer, database);
+    await sendEmail(log, settings, due, allDuesForDealer, database, existingTransporter);
     return "sent" as const;
   }
 
@@ -2018,43 +2031,100 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
 
     const logs = pendingLogs;
 
-    for (const log of logs) {
-      try {
-        if (log.channel === "email" && !resolvedSettings.emailEnabled) {
-          throw new Error("Email dispatches are globally disabled in settings.");
-        }
-        if (log.channel === "whatsapp" && !resolvedSettings.whatsappEnabled) {
-          throw new Error("WhatsApp dispatches are globally disabled in settings.");
-        }
-        if (log.channel === "sms" && !resolvedSettings.smsEnabled) {
-          throw new Error("SMS dispatches are globally disabled in settings.");
-        }
+    let batchTransporter: nodemailer.Transporter | undefined = undefined;
+    if (
+      resolvedSettings.emailEnabled &&
+      resolvedSettings.smtpHost &&
+      (resolvedSettings.senderEmail || resolvedSettings.smtpFrom)
+    ) {
+      batchTransporter = nodemailer.createTransport({
+        pool: true,
+        host: resolvedSettings.smtpHost,
+        port: resolvedSettings.smtpPort,
+        secure: resolvedSettings.smtpSecure,
+        maxConnections: 1,
+        maxMessages: 500,
+        rateDelta: 1000,
+        rateLimit: 1,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        auth: resolvedSettings.smtpUser
+          ? {
+              user: resolvedSettings.smtpUser,
+              pass: resolvedSettings.smtpPass
+            }
+          : undefined
+      });
+    }
 
-        const due = database.dueRecords.find((entry) => entry.id === log.dueId);
-        const allDuesForDealer = due
-          ? filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds).filter(
-              (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
-            )
-          : [];
-        const status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database);
-        log.status = status;
-        log.sentAt = new Date().toISOString();
-        log.failureReason = "";
-        if (due) {
-          due.lastReminderDate = log.sentAt;
-          due.reminderCount = (due.reminderCount || 0) + 1;
-          due.lastDispatchStatus = status;
-          due.updatedBy = user.id;
+    try {
+      let emailIndex = 0;
+      for (const log of logs) {
+        try {
+          if (log.channel === "email" && !resolvedSettings.emailEnabled) {
+            throw new Error("Email dispatches are globally disabled in settings.");
+          }
+          if (log.channel === "whatsapp" && !resolvedSettings.whatsappEnabled) {
+            throw new Error("WhatsApp dispatches are globally disabled in settings.");
+          }
+          if (log.channel === "sms" && !resolvedSettings.smsEnabled) {
+            throw new Error("SMS dispatches are globally disabled in settings.");
+          }
+
+          if (log.channel === "email" && emailIndex > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+
+          const due = database.dueRecords.find((entry) => entry.id === log.dueId);
+          const allDuesForDealer = due
+            ? filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds).filter(
+                (entry) => getDuePartyKey(entry) === getDuePartyKey(due)
+              )
+            : [];
+
+          let status: "sent" = "sent";
+          try {
+            status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database, batchTransporter);
+          } catch (firstErr: any) {
+            const firstErrStr = firstErr instanceof Error ? firstErr.message : String(firstErr);
+            if (
+              log.channel === "email" &&
+              (firstErrStr.includes("454") || firstErrStr.toLowerCase().includes("too many login attempts"))
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 5000));
+              status = await deliverReminder(log, resolvedSettings, due, allDuesForDealer, database, batchTransporter);
+            } else {
+              throw firstErr;
+            }
+          }
+
+          log.status = status;
+          log.sentAt = new Date().toISOString();
+          log.failureReason = "";
+          if (log.channel === "email") {
+            emailIndex++;
+          }
+          if (due) {
+            due.lastReminderDate = log.sentAt;
+            due.reminderCount = (due.reminderCount || 0) + 1;
+            due.lastDispatchStatus = status;
+            due.updatedBy = user.id;
+          }
+        } catch (error) {
+          log.status = "failed";
+          log.failureReason =
+            error instanceof Error ? error.message : "Unknown sending error occurred.";
+          const due = database.dueRecords.find((entry) => entry.id === log.dueId);
+          if (due) {
+            due.lastDispatchStatus = "failed";
+            due.updatedBy = user.id;
+          }
         }
-      } catch (error) {
-        log.status = "failed";
-        log.failureReason =
-          error instanceof Error ? error.message : "Unknown sending error occurred.";
-        const due = database.dueRecords.find((entry) => entry.id === log.dueId);
-        if (due) {
-          due.lastDispatchStatus = "failed";
-          due.updatedBy = user.id;
-        }
+      }
+    } finally {
+      if (batchTransporter) {
+        batchTransporter.close();
       }
     }
 
