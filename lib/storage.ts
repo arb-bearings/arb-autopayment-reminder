@@ -177,6 +177,17 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
             salespersonId: toStringValue((contact as Record<string, unknown>)?.salespersonId),
             salespersonName: toStringValue((contact as Record<string, unknown>)?.salespersonName),
             salespersonEmail: toStringValue((contact as Record<string, unknown>)?.salespersonEmail),
+            backOfficeEmail:
+              toStringValue((contact as Record<string, unknown>)?.backOfficeEmail) ||
+              (contact?.raw && typeof contact.raw === "object"
+                ? toStringValue(
+                    (contact.raw as Record<string, unknown>)["back office mail id"] ||
+                    (contact.raw as Record<string, unknown>)["back office mail ie"] ||
+                    (contact.raw as Record<string, unknown>)["back office email"] ||
+                    (contact.raw as Record<string, unknown>)["backoffice mail id"] ||
+                    (contact.raw as Record<string, unknown>)["backoffice email"]
+                  )
+                : ""),
             importedAt: toStringValue(contact?.importedAt),
             raw:
               contact?.raw && typeof contact.raw === "object"
@@ -427,6 +438,7 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           employeeId: toStringValue(entry?.employeeId),
           email: toStringValue(entry?.email),
           phoneNumber: toStringValue(entry?.phoneNumber),
+          backOfficeEmail: toStringValue(entry?.backOfficeEmail),
           dealerCodes: Array.isArray(entry?.dealerCodes)
             ? entry.dealerCodes
                 .map((code) => {

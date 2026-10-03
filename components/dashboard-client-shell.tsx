@@ -17,7 +17,6 @@ const adminSections: Array<{
   { href: "/dashboard/settings/database", label: "Database" },
   { href: "/dashboard/settings/reminders", label: "Reminders" },
   { href: "/dashboard/settings/templates", label: "Templates" },
-  { href: "/dashboard/settings/salespersons", label: "Salespersons" },
   { href: "/dashboard/settings/email", label: "Email" },
   { href: "/dashboard/settings/reports", label: "Reports" },
   { href: "/dashboard/settings/logs", label: "Logs" }
@@ -47,6 +46,7 @@ export function DashboardClientShell({
   const [isPending, startTransition] = useTransition();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const canUseDues = isAdmin || canSendManualReminders || userRole === "user";
+  const canDispatch = canUseDues;
   const isSettingsRoute = pathname.startsWith("/dashboard/settings");
   const visibleAdminSections = adminSections.filter(
     (item) => !item.superAdminOnly || userRole === "super_admin"
@@ -54,7 +54,10 @@ export function DashboardClientShell({
   const navItems: Array<{ href: Route; label: string }> = [
     { href: "/dashboard", label: "Dashboard" },
     ...(isAdmin
-      ? ([{ href: "/dashboard/master", label: "Master Database" }] satisfies Array<{
+      ? ([
+          { href: "/dashboard/master", label: "Master Database" },
+          { href: "/dashboard/managers" as unknown as Route, label: "Managers" }
+        ] satisfies Array<{
           href: Route;
           label: string;
         }>)

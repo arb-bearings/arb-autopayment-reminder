@@ -67,6 +67,13 @@ export async function POST(request: NextRequest) {
         ruleId,
         hasChannelOverride ? selectedChannels : undefined
       );
+
+      if (created.length === 0) {
+        throw new Error(
+          "None of the selected invoices have matching contacts in the master database. No reminders could be created or sent."
+        );
+      }
+
       const logs = await sendPendingReminders(
         user.id,
         undefined,
@@ -74,18 +81,22 @@ export async function POST(request: NextRequest) {
       );
 
       const salespersonSummaries = await sendSalespersonSummaries(user, logs);
+      const activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
       const ownerReport = await sendDailyActivityReport(user);
       await recordAuditLog(
         user,
         "Reminder Dispatch",
         "success",
-        `Manual dispatch processed ${logs.length} reminders, sent ${salespersonSummaries.length} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
+        `Manual dispatch processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
       );
+
+      const skippedCount = selectedDueIds.length - created.length;
+      const skippedNote = skippedCount > 0 ? ` (skipped ${skippedCount} invoice${skippedCount === 1 ? "" : "s"} with no matched contact)` : "";
 
       return makeResponse(
         request,
         `/dashboard/dues?message=${encodeURIComponent(
-          `Sent ${logs.length} manual reminder${logs.length === 1 ? "" : "s"} for ${selectedDueIds.length} selected invoice${selectedDueIds.length === 1 ? "" : "s"}, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+          `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts${skippedNote}, sent ${activeSalespersonCount} salesperson summar${activeSalespersonCount === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
         )}`,
         logs.length
       );
@@ -100,18 +111,24 @@ export async function POST(request: NextRequest) {
     } else {
       logs = await sendPendingReminders(user.id);
     }
+
+    if (logs.length === 0) {
+      throw new Error("No pending reminders with matched contacts were found to send.");
+    }
+
     const salespersonSummaries = await sendSalespersonSummaries(user, logs);
+    const activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
     const ownerReport = await sendDailyActivityReport(user);
     await recordAuditLog(
       user,
       "Reminder Dispatch",
       "success",
-      `Processed ${logs.length} pending reminders, sent ${salespersonSummaries.length} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
+      `Processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
     );
     return makeResponse(
       request,
       `/dashboard/dues?message=${encodeURIComponent(
-        `Processed ${logs.length} pending reminders, sent ${salespersonSummaries.length} salesperson summar${salespersonSummaries.length === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+        `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts, sent ${activeSalespersonCount} salesperson summar${activeSalespersonCount === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
       )}`,
       logs.length
     );

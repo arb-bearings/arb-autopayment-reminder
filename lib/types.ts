@@ -51,6 +51,7 @@ export type MasterContact = {
   salespersonId: string;
   salespersonName: string;
   salespersonEmail: string;
+  backOfficeEmail?: string;
   importedAt: string;
   raw: Record<string, string>;
 };
@@ -246,6 +247,7 @@ export type Salesperson = {
   employeeId: string;
   email: string;
   phoneNumber: string;
+  backOfficeEmail?: string;
   dealerCodes: string[];
   createdAt: string;
   updatedAt: string;

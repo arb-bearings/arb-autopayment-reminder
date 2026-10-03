@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
   if (!(file instanceof File)) {
     return NextResponse.redirect(
-      new URL("/dashboard/settings/salespersons?error=Please%20upload%20a%20valid%20salesperson%20file.", request.url),
+      new URL("/dashboard/managers?error=Please%20upload%20a%20valid%20manager%20file.", request.url),
       { status: 303 }
     );
   }
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
             match.employeeId = entry.employeeId;
             match.email = entry.email;
             match.phoneNumber = entry.phoneNumber;
+            match.backOfficeEmail = entry.backOfficeEmail || match.backOfficeEmail || "";
             match.dealerCodes = entry.dealerCodes;
             match.updatedAt = entry.updatedAt;
             return;
@@ -81,14 +82,14 @@ export async function POST(request: Request) {
     await recordAuditLog(user, "Salesperson Configuration", "success", "Salesperson file imported.");
 
     return NextResponse.redirect(
-      new URL("/dashboard/settings/salespersons?message=Salesperson%20file%20imported.", request.url),
+      new URL("/dashboard/managers?message=Manager%20file%20imported.", request.url),
       { status: 303 }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Salesperson import failed.";
     await recordAuditLog(user, "Salesperson Configuration", "failed", message);
     return NextResponse.redirect(
-      new URL(`/dashboard/settings/salespersons?error=${encodeURIComponent(message)}`, request.url),
+      new URL(`/dashboard/managers?error=${encodeURIComponent(message)}`, request.url),
       { status: 303 }
     );
   }

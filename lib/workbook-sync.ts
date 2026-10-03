@@ -10,6 +10,7 @@ import { applySalespersonMappings } from "@/lib/salesperson-mapping";
 import { readDatabase, updateDatabase } from "@/lib/storage";
 import type { DueRecord, MasterContact } from "@/lib/types";
 import { extractDealerCodeAndName } from "@/lib/dealer-utils";
+import { randomUUID } from "node:crypto";
 
 function normalizeWorkbookHeader(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, " ");
@@ -207,6 +208,10 @@ export async function syncStoredMasterWorkbook(workspaceId: string, companyName:
           (entry.status === "pending" || entry.status === "failed")
         )
     );
+
+    // Auto-sync managers from the freshly imported master contacts
+    syncManagersFromMasterContacts(database.masterContacts.filter((c) => sharedOwnerIds.has(c.ownerId)), database, configOwnerId);
+
     applySalespersonMappings(
       database,
       database.salespersons.filter((entry) => entry.ownerId === configOwnerId),
@@ -218,6 +223,96 @@ export async function syncStoredMasterWorkbook(workspaceId: string, companyName:
   return {
     recordCount: records.length
   };
+}
+
+/**
+ * Extract unique manager profiles from master contacts and upsert them
+ * into the salespersons collection (create new or merge dealer codes).
+ */
+function syncManagersFromMasterContacts(
+  contacts: MasterContact[],
+  database: Parameters<Parameters<typeof updateDatabase>[0]>[0],
+  configOwnerId: string
+) {
+  const managerMap = new Map<string, {
+    employeeId: string;
+    name: string;
+    email: string;
+    backOfficeEmail: string;
+    dealerCodesSet: Set<string>;
+  }>();
+
+  for (const contact of contacts) {
+    const name = contact.salespersonName?.trim() || "";
+    const email = contact.salespersonEmail?.trim() || "";
+    const employeeId = contact.salespersonId?.trim() || "";
+    const rawBackOffice = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["back office mail id"] ||
+         contact.raw["back office mail ie"] ||
+         contact.raw["back office email"] ||
+         contact.raw["backoffice mail id"] ||
+         contact.raw["backoffice email"] ||
+         "")
+      : "";
+    const backOfficeEmail = (contact.backOfficeEmail?.trim() || rawBackOffice.trim());
+
+    if (!name && !email) continue;
+
+    const key = (employeeId || email || name).toLowerCase();
+    const dealerCode = (contact.dealerCode || contact.customerCode || "").trim();
+    const existing = managerMap.get(key);
+
+    if (existing) {
+      if (dealerCode) existing.dealerCodesSet.add(dealerCode);
+      if (backOfficeEmail) existing.backOfficeEmail = backOfficeEmail;
+    } else {
+      const dealerCodesSet = new Set<string>();
+      if (dealerCode) dealerCodesSet.add(dealerCode);
+      managerMap.set(key, {
+        employeeId: employeeId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        name,
+        email,
+        backOfficeEmail,
+        dealerCodesSet
+      });
+    }
+  }
+
+  if (managerMap.size === 0) return;
+
+  const now = new Date().toISOString();
+  const existingManagers = database.salespersons.filter((s) => s.ownerId === configOwnerId);
+
+  for (const data of managerMap.values()) {
+    const match = existingManagers.find(
+      (s) =>
+        (data.employeeId && s.employeeId.toLowerCase() === data.employeeId.toLowerCase()) ||
+        (data.email && s.email.toLowerCase() === data.email.toLowerCase())
+    );
+
+    if (match) {
+      match.name = data.name || match.name;
+      match.email = data.email || match.email;
+      match.employeeId = data.employeeId || match.employeeId;
+      if (data.backOfficeEmail) match.backOfficeEmail = data.backOfficeEmail;
+      const merged = new Set([...match.dealerCodes, ...data.dealerCodesSet]);
+      match.dealerCodes = Array.from(merged).sort();
+      match.updatedAt = now;
+    } else {
+      database.salespersons.push({
+        id: randomUUID(),
+        ownerId: configOwnerId,
+        name: data.name,
+        employeeId: data.employeeId,
+        email: data.email,
+        phoneNumber: "",
+        backOfficeEmail: data.backOfficeEmail,
+        dealerCodes: Array.from(data.dealerCodesSet).sort(),
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+  }
 }
 
 export async function syncStoredDueWorkbook(workspaceId: string, companyName: string) {

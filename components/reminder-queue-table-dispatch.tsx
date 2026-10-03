@@ -19,7 +19,16 @@ export function ReminderQueueTableDispatch({
   isAdmin
 }: ReminderQueueTableDispatchProps) {
   const pendingLogIds = useMemo(() => {
-    return reminderLogs.filter((log) => log.status === "pending").map((log) => log.id);
+    return reminderLogs
+      .filter((log) => {
+        if (log.status !== "pending") return false;
+        const rec = (log.recipient || "").trim().toLowerCase();
+        if (!rec || rec.includes("no master contact") || rec.includes("missing") || rec === "n/a" || rec === "undefined") {
+          return false;
+        }
+        return true;
+      })
+      .map((log) => log.id);
   }, [reminderLogs]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(pendingLogIds));
@@ -98,12 +107,16 @@ export function ReminderQueueTableDispatch({
               reminderLogs.map((log, index) => {
                 const due = dueRecordMap.get(log.dueId);
                 const rule = ruleMap.get(log.ruleId);
-                const isPending = log.status === "pending";
+                const isSendable =
+                  log.status === "pending" &&
+                  Boolean(log.recipient) &&
+                  !log.recipient.toLowerCase().includes("no master contact") &&
+                  !log.recipient.toLowerCase().includes("missing");
 
                 return (
                   <tr key={log.id}>
                     <td style={{ textAlign: "center" }}>
-                      {isPending ? (
+                      {isSendable ? (
                         <input
                           type="checkbox"
                           checked={selectedIds.has(log.id)}

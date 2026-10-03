@@ -490,7 +490,7 @@ export function ReminderLogsClient({
                       </span>
 
                       <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                        Salesperson: {dealer.salespersonName}
+                        Manager: {dealer.salespersonName}
                       </span>
                     </div>
                   </div>

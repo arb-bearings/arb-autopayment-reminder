@@ -322,7 +322,7 @@ export function GroupedDuesTable({
                       ) : (
                         <span className="badge current">All current</span>
                       )}
-                      <span>Salesperson: {group.salespersonName}</span>
+                      <span>Manager: {group.salespersonName}</span>
                     </div>
                   </div>
 

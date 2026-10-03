@@ -36,14 +36,14 @@ export async function POST(request: Request) {
     await recordAuditLog(user, "Salesperson Configuration", "success", salespersonId);
 
     return NextResponse.redirect(
-      new URL("/dashboard/settings/salespersons?message=Salesperson%20deleted.", request.url),
+      new URL("/dashboard/managers?message=Manager%20deleted.", request.url),
       { status: 303 }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Salesperson delete failed.";
     await recordAuditLog(user, "Salesperson Configuration", "failed", message);
     return NextResponse.redirect(
-      new URL(`/dashboard/settings/salespersons?error=${encodeURIComponent(message)}`, request.url),
+      new URL(`/dashboard/managers?error=${encodeURIComponent(message)}`, request.url),
       { status: 303 }
     );
   }

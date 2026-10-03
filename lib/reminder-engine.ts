@@ -1014,25 +1014,21 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
     for (const [dealerKey, dealerInvoices] of invoicesByDealer.entries()) {
       const representativeDue = dealerInvoices[0];
       const matchingContact = findMatchingMasterContact(representativeDue, contacts);
-      const isContactMatched = Boolean(matchingContact);
-      const contact: MasterContact = matchingContact || {
-        id: "",
-        ownerId: workspace.configOwnerId,
-        dealerCode: representativeDue.dealerCode || representativeDue.customerCode || "",
-        customerCode: representativeDue.dealerCode || representativeDue.customerCode || "",
-        companyName: representativeDue.companyName,
-        primaryContact: representativeDue.companyName || "Accounts Team",
-        email: "",
-        whatsapp: "",
-        sms: "",
-        alternateContact: "",
-        notes: "",
-        salespersonId: representativeDue.salespersonId || "",
-        salespersonName: representativeDue.salespersonName || "",
-        salespersonEmail: representativeDue.salespersonEmail || "",
-        importedAt: "",
-        raw: {}
-      };
+      if (!matchingContact) {
+        // Skip dealers that have no matching contact in the master database
+        continue;
+      }
+      const hasAnyContactMethod = Boolean(
+        matchingContact.email?.trim() ||
+        matchingContact.whatsapp?.trim() ||
+        matchingContact.sms?.trim()
+      );
+      if (!hasAnyContactMethod) {
+        // Skip contacts that have neither email, whatsapp, nor sms
+        continue;
+      }
+      const isContactMatched = true;
+      const contact: MasterContact = matchingContact;
 
       // Calculate invoice age and sort from oldest to newest
       const invoicesWithAge = dealerInvoices
@@ -1357,106 +1353,19 @@ export async function generateRemindersForUser(ownerId: string, requestedDate?: 
       const cleanDueName = extractedDue.companyName || oldestSelectedDue.companyName || "";
 
       if (!isContactMatched) {
-        // Log unmatched dealer reminder for enabled channels
-        const channelsToCheck: ReminderLog["channel"][] = ["email", "whatsapp", "sms"];
-        for (const channel of channelsToCheck) {
-          const isChannelEnabled = rule.channels[channel];
-          if (!isChannelEnabled) continue;
-
-          const dedupeKey = buildReminderDedupeKey(oldestSelectedDue, rule, channel);
-          if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
-            continue;
-          }
-
-          created.push({
-            id: randomUUID(),
-            ownerId: workspace.workspaceId,
-            dueId: oldestSelectedDue.id,
-            dedupeKey,
-            contactId: "",
-            ruleId: rule.id,
-            templateId: template.id,
-            dealerCode: cleanDueCode,
-            invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
-            reminderDay: rule.triggerDay,
-            billAgeDays: oldestSelectedDueAge,
-            cdEligible: cdEvaluation.eligible,
-            cdPolicyId: cdEvaluation.policy?.id || "",
-            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
-            cdReason: cdEvaluation.reason,
-            cdAmount: cdEvaluation.cdAmount,
-            eligibleAmount: cdEvaluation.eligibleAmount,
-            channel,
-            recipient: "No master contact",
-            scheduledFor,
-            status: "failed",
-            subject: `${rule.name} reminder - Missing Contact`,
-            content: `Reminder not queued: No matching master contact found in master database for dealer "${cleanDueName}" (${cleanDueCode || "No Code"}).`,
-            failureReason: "No matching master contact found in master database",
-            sentAt: "",
-            createdAt: new Date().toISOString(),
-            dealerName: cleanDueName,
-            reminderType,
-            selectedAgeingStage: stageLabel,
-            invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
-            relevantAmount,
-            totalOutstanding,
-            thresholdAmount
-          });
-        }
         continue;
       }
 
       const channelEntries = buildChannelEntries(rule, effectiveTemplate, contact, oldestSelectedDue, undefined, settings);
 
       for (const [channel, enabled, recipient, body] of channelEntries) {
-        if (!enabled) {
+        if (!enabled || !recipient || recipient.toLowerCase().includes("missing")) {
           continue;
         }
 
         const dedupeKey = buildReminderDedupeKey(oldestSelectedDue, rule, channel);
 
         if (hasExistingLog(database.reminderLogs, dedupeKey, scheduledFor)) {
-          continue;
-        }
-
-        if (!recipient) {
-          // Channel is enabled on rule, but contact is missing email/phone
-          created.push({
-            id: randomUUID(),
-            ownerId: workspace.workspaceId,
-            dueId: oldestSelectedDue.id,
-            dedupeKey,
-            contactId: contact.id,
-            ruleId: rule.id,
-            templateId: template.id,
-            dealerCode: cleanDueCode,
-            invoiceNumber: selectedInvoices.map((inv) => inv.invoiceNumber || inv.reference || "N/A").join(", "),
-            reminderDay: rule.triggerDay,
-            billAgeDays: oldestSelectedDueAge,
-            cdEligible: cdEvaluation.eligible,
-            cdPolicyId: cdEvaluation.policy?.id || "",
-            cdDiscountPercent: cdEvaluation.policy?.discountPercent ?? 0,
-            cdReason: cdEvaluation.reason,
-            cdAmount: cdEvaluation.cdAmount,
-            eligibleAmount: cdEvaluation.eligibleAmount,
-            channel,
-            recipient: `Missing ${channel} contact details`,
-            scheduledFor,
-            status: "failed",
-            subject: `${rule.name} reminder - Missing ${channel}`,
-            content: `Reminder not queued: Contact "${contact.primaryContact || contact.companyName}" has no valid ${channel} address in master database.`,
-            failureReason: `Missing ${channel} contact details in master database`,
-            sentAt: "",
-            createdAt: new Date().toISOString(),
-            dealerName: cleanDueName,
-            reminderType,
-            selectedAgeingStage: stageLabel,
-            invoiceIdsInvolved: selectedInvoices.map((inv) => inv.id),
-            relevantAmount,
-            totalOutstanding,
-            thresholdAmount
-          });
           continue;
         }
 
@@ -1718,8 +1627,13 @@ export async function createManualRemindersForDues(
   const created: ReminderLog[] = [];
 
   for (const dueId of uniqueDueIds) {
-    const entries = await createManualRemindersForDue(ownerId, dueId, ruleId, channelSelection);
-    created.push(...entries);
+    try {
+      const entries = await createManualRemindersForDue(ownerId, dueId, ruleId, channelSelection);
+      created.push(...entries);
+    } catch {
+      // Safely skip invoices that have no matching contact or invalid date
+      continue;
+    }
   }
 
   return created;
@@ -1750,9 +1664,23 @@ async function sendEmail(
   const recipients = parseEmailList(log.recipient);
   const to = recipients.length > 0 ? recipients : log.recipient;
 
+  // CC the dealer's manager email on reminder emails
+  let cc: string[] | undefined;
+  if (due?.salespersonEmail && isValidEmailAddress(due.salespersonEmail)) {
+    const recipientList = Array.isArray(to) ? to : [to];
+    const managerEmail = due.salespersonEmail.trim().toLowerCase();
+    const alreadyRecipient = recipientList.some(
+      (r) => (typeof r === "string" ? r : "").trim().toLowerCase() === managerEmail
+    );
+    if (!alreadyRecipient) {
+      cc = [due.salespersonEmail];
+    }
+  }
+
   await transporter.sendMail({
     from: settings.senderEmail || settings.smtpFrom,
     to,
+    cc,
     subject: log.subject,
     text: log.content,
     html: due ? buildReminderEmailHtml(log, due, allDuesForDealer, database) : buildBasicEmailHtml(log.content)
@@ -2021,13 +1949,72 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
     }
     const resolvedSettings = resolveDispatchSettings(settings);
 
-    const pendingLogs = database.reminderLogs.filter(
-      (entry) =>
-        workspace.sharedOwnerIds.has(entry.ownerId) &&
-        entry.status === "pending" &&
-        (!ruleIds || ruleIds.includes(entry.ruleId)) &&
-        (!logIds || logIds.includes(entry.id))
-    );
+    const sharedContacts = filterSharedCompanyRecords(database.masterContacts, workspace.sharedOwnerIds);
+
+    // Clean up any lingering invalid pending logs so they never get attempted
+    for (const log of database.reminderLogs) {
+      if (
+        workspace.sharedOwnerIds.has(log.ownerId) &&
+        log.status === "pending" &&
+        (!log.recipient ||
+          log.recipient.toLowerCase().includes("no master contact") ||
+          log.recipient.toLowerCase().includes("missing") ||
+          log.recipient.toLowerCase() === "n/a" ||
+          log.recipient.toLowerCase() === "undefined")
+      ) {
+        log.status = "failed";
+        log.failureReason = "No matching master contact in master database";
+      }
+    }
+
+    const pendingLogs = database.reminderLogs.filter((entry) => {
+      if (!workspace.sharedOwnerIds.has(entry.ownerId)) return false;
+      if (entry.status !== "pending") return false;
+      if (ruleIds && !ruleIds.includes(entry.ruleId)) return false;
+      if (logIds && !logIds.includes(entry.id)) return false;
+
+      const recipient = (entry.recipient || "").trim();
+      if (!recipient) return false;
+      const recLower = recipient.toLowerCase();
+      if (
+        recLower.includes("no master contact") ||
+        recLower.includes("missing") ||
+        recLower === "n/a" ||
+        recLower === "undefined"
+      ) {
+        return false;
+      }
+
+      // Check if this reminder corresponds to a matched master contact
+      const hasMatchedContact = sharedContacts.some((c) => {
+        if (entry.contactId && c.id === entry.contactId) return true;
+        const entryCode = (entry.dealerCode || "").trim().toLowerCase();
+        const entryName = (entry.dealerName || "").trim().toLowerCase();
+        const contactCode = (c.dealerCode || "").trim().toLowerCase();
+        const contactName = (c.companyName || "").trim().toLowerCase();
+        return (
+          (entryCode && contactCode && entryCode === contactCode) ||
+          (entryName && contactName && entryName === contactName)
+        );
+      });
+
+      if (!hasMatchedContact) {
+        return false;
+      }
+
+      // Check channel validity
+      if (entry.channel === "email" && !isValidEmailAddress(recipient)) {
+        return false;
+      }
+      if (
+        (entry.channel === "whatsapp" || entry.channel === "sms") &&
+        recipient.replace(/\D/g, "").length < 10
+      ) {
+        return false;
+      }
+
+      return true;
+    });
 
     const logs = pendingLogs;
 
