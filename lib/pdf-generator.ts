@@ -458,12 +458,24 @@ export function generateSalespersonSummaryPDF(
       const currency = dues[0]?.currency || "INR";
 
       const cdLogs = sentLogs.filter(log => log.cdEligible);
-      const cdDueIds = new Set(cdLogs.map(log => log.dueId).filter(Boolean));
+      const cdDueIds = new Set<string>();
+      cdLogs.forEach(log => {
+        if (log.dueId) cdDueIds.add(log.dueId);
+        if (Array.isArray(log.invoiceIdsInvolved)) {
+          log.invoiceIdsInvolved.forEach((id: string) => id && cdDueIds.add(id));
+        }
+      });
       const cdDues = dues.filter(due => cdDueIds.has(due.id));
       const cdOutstanding = cdDues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
       const over90Logs = sentLogs.filter(log => (log.reminderDay || 0) > 90);
-      const over90DueIds = new Set(over90Logs.map(log => log.dueId).filter(Boolean));
+      const over90DueIds = new Set<string>();
+      over90Logs.forEach(log => {
+        if (log.dueId) over90DueIds.add(log.dueId);
+        if (Array.isArray(log.invoiceIdsInvolved)) {
+          log.invoiceIdsInvolved.forEach((id: string) => id && over90DueIds.add(id));
+        }
+      });
       const over90Dues = dues.filter(due => over90DueIds.has(due.id));
       const over90Outstanding = over90Dues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
@@ -542,9 +554,9 @@ export function generateSalespersonSummaryPDF(
       // Calculate brackets
       const brackets = [
         { label: "More than 180 Days", min: 181, max: Infinity },
-        { label: "Between 120 and 180 Days", min: 121, max: 180 },
-        { label: "Between 90 and 120 Days", min: 91, max: 120 },
-        { label: "90 Days", min: 90, max: 90 },
+        { label: "Between 120 and 180 Days", min: 120, max: 180 },
+        { label: "Between 90 and 120 Days", min: 90, max: 120 },
+        { label: "90 Days", min: 89, max: 90 },
         { label: "75 Days", min: 75, max: 89 },
         { label: "60 Days", min: 60, max: 74 },
         { label: "45 Days", min: 45, max: 59 },
@@ -566,8 +578,36 @@ export function generateSalespersonSummaryPDF(
         const ruleDealerCodes = Array.from(new Set(ruleLogs.map(log => log.dealerCode).filter(Boolean)));
         const assignedDealersCount = ruleDealerCodes.length;
         const sentTodayCount = ruleLogs.length;
-        const matchingDueIds = ruleLogs.map(log => log.dueId).filter(Boolean);
-        const ruleDues = dues.filter(due => matchingDueIds.includes(due.id));
+        const matchingDueIds = new Set<string>();
+        ruleLogs.forEach((log) => {
+          if (log.dueId) matchingDueIds.add(log.dueId);
+          if (Array.isArray(log.invoiceIdsInvolved)) {
+            log.invoiceIdsInvolved.forEach((id: string) => id && matchingDueIds.add(id));
+          }
+        });
+
+        const ruleDealerCodeSet = new Set(
+          ruleLogs.map((log) => (log.dealerCode || "").trim().toLowerCase()).filter(Boolean)
+        );
+        const ruleDealerNameSet = new Set(
+          ruleLogs.map((log) => (log.dealerName || "").trim().toLowerCase()).filter(Boolean)
+        );
+
+        const ruleDues = dues.filter((due) => {
+          if (matchingDueIds.has(due.id)) {
+            return true;
+          }
+          const dCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
+          const dName = (due.companyName || "").trim().toLowerCase();
+          const matchesDealer = (dCode && ruleDealerCodeSet.has(dCode)) || (dName && ruleDealerNameSet.has(dName));
+          if (!matchesDealer) {
+            return false;
+          }
+          const age = getBillAgeDays(due.billDate || due.invoiceDate, new Date());
+          if (age === null) return false;
+          return age >= bracket.min && age <= bracket.max;
+        });
+
         const paymentDueAmount = ruleDues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
         // Group by dealer
