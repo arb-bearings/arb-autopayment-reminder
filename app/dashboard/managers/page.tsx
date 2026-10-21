@@ -15,7 +15,7 @@ export default async function ManagersPage({
   const workspace = getCompanyWorkspaceContextForUser(database, user);
 
   const managers = database.salespersons.filter(
-    (s) => s.ownerId === workspace.configOwnerId
+    (s) => workspace.sharedOwnerIds.has(s.ownerId) || s.ownerId === workspace.configOwnerId
   );
 
   const masterContacts = database.masterContacts.filter((c) =>

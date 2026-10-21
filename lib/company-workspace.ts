@@ -62,9 +62,9 @@ export function getCompanyWorkspaceId(companyName: string) {
 }
 
 export function getCompanyUsers(database: AppDatabase, companyName: string) {
-  const normalized = companyName.trim().toLowerCase();
+  const targetCode = normalizeCompanyCode(companyName);
   return database.users.filter(
-    (entry) => entry.companyName.trim().toLowerCase() === normalized
+    (entry) => normalizeCompanyCode(entry.companyName) === targetCode
   );
 }
 

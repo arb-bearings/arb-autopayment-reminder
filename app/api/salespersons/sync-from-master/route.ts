@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
     await updateDatabase((db) => {
       const existingManagers = db.salespersons.filter(
-        (s) => s.ownerId === workspace.configOwnerId
+        (s) => workspace.sharedOwnerIds.has(s.ownerId) || s.ownerId === workspace.configOwnerId
       );
 
       for (const data of managerMap.values()) {
