@@ -1,5 +1,14 @@
+import dns from "node:dns";
 import { MongoClient, type Db } from "mongodb";
 import { normalizeCompanyCode, type CompanyCode } from "@/lib/company-workspace";
+
+// Ensure DNS SRV lookup works reliably across environments (e.g., local Windows ISP DNS)
+try {
+  const currentServers = dns.getServers();
+  dns.setServers([...new Set(["8.8.8.8", "1.1.1.1", ...currentServers])]);
+} catch {
+  // Ignore DNS server set errors if restricted by runtime environment
+}
 
 declare global {
   var __mongoClientPromise__: Promise<MongoClient> | undefined;
