@@ -78,7 +78,23 @@ export function getCompanyWorkspaceContext(database: AppDatabase, companyName: s
     companyUsers.find((entry) => entry.role === "admin") ||
     companyUsers[0] ||
     null;
-  const sharedOwnerIds = new Set<string>([workspaceId, ...companyUsers.map((entry) => entry.id)]);
+
+  const code = normalizeCompanyCode(companyName);
+  const commonAliases =
+    code === "LUB"
+      ? ["company:arb-lubricants", "company:arb-lubricants-private-limited", "company:ans-lubricants"]
+      : [
+          "company:arb-bearings",
+          "company:arb-bearings-private-limited",
+          "company:arb-bearing-pvt-limited",
+          "company:ans-bearings"
+        ];
+
+  const sharedOwnerIds = new Set<string>([
+    workspaceId,
+    ...commonAliases,
+    ...companyUsers.map((entry) => entry.id)
+  ]);
   const configOwnerId = adminUser?.id || workspaceId;
 
   return {
