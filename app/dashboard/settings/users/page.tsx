@@ -19,6 +19,7 @@ export default async function UserManagementPage({
       title="User management"
       description="Create users, assign roles, and grant manual reminder permission."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

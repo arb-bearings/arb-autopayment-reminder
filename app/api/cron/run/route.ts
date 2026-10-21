@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCompanyWorkspaceContext } from "@/lib/company-workspace";
+import { getCompanyWorkspaceContext, SUPPORTED_COMPANIES } from "@/lib/company-workspace";
 import { generateRemindersForUser, sendPendingReminders } from "@/lib/reminder-engine";
 import { sendDailyActivityReport, sendSalespersonSummaries } from "@/lib/reports";
 import { readDatabase } from "@/lib/storage";
@@ -14,56 +14,64 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const database = await readDatabase();
-  const users = database.users;
-  const processedWorkspaces = new Set<string>();
-  const summary: Array<{ email: string; generated: number; processed: number; report: string }> = [];
+  const summary: Array<{ company: string; email: string; generated: number; processed: number; report: string }> = [];
 
-  for (const user of users) {
-    const workspace = getCompanyWorkspaceContext(database, user.companyName);
-    if (processedWorkspaces.has(workspace.workspaceId)) {
-      continue;
-    }
-    processedWorkspaces.add(workspace.workspaceId);
+  for (const company of SUPPORTED_COMPANIES) {
+    try {
+      const database = await readDatabase(company.code);
+      const users = database.users;
+      const processedWorkspaces = new Set<string>();
 
-    const generated = await generateRemindersForUser(user.id);
-    const autoSendRuleIds = database.reminderRules
-      .filter(
-        (entry) => entry.ownerId === workspace.configOwnerId && entry.enabled && entry.autoSend
-      )
-      .map((entry) => entry.id);
-    let sentLogs: Awaited<ReturnType<typeof sendPendingReminders>> = [];
-    if (autoSendRuleIds.length > 0) {
-      sentLogs = await sendPendingReminders(user.id, autoSendRuleIds);
-    }
-    const processed = sentLogs.length;
+      for (const user of users) {
+        const workspace = getCompanyWorkspaceContext(database, user.companyName || company.fullName);
+        if (processedWorkspaces.has(workspace.workspaceId)) {
+          continue;
+        }
+        processedWorkspaces.add(workspace.workspaceId);
 
-    // Send salesperson summaries if any reminders were dispatched (including auto-sent)
-    const sentDuringGeneration = generated.filter((entry) => entry.status === "sent");
-    const totalDispatched = [...sentDuringGeneration, ...sentLogs];
+        const generated = await generateRemindersForUser(user.id);
+        const autoSendRuleIds = database.reminderRules
+          .filter(
+            (entry) => entry.ownerId === workspace.configOwnerId && entry.enabled && entry.autoSend
+          )
+          .map((entry) => entry.id);
+        let sentLogs: Awaited<ReturnType<typeof sendPendingReminders>> = [];
+        if (autoSendRuleIds.length > 0) {
+          sentLogs = await sendPendingReminders(user.id, autoSendRuleIds);
+        }
+        const processed = sentLogs.length;
 
-    if (totalDispatched.length > 0) {
-      try {
-        await sendSalespersonSummaries(user, totalDispatched);
-      } catch (err) {
-        console.error(`Cron: failed to send salesperson summaries for ${user.email}:`, err);
+        // Send salesperson summaries if any reminders were dispatched (including auto-sent)
+        const sentDuringGeneration = generated.filter((entry) => entry.status === "sent");
+        const totalDispatched = [...sentDuringGeneration, ...sentLogs];
+
+        if (totalDispatched.length > 0) {
+          try {
+            await sendSalespersonSummaries(user, totalDispatched);
+          } catch (err) {
+            console.error(`Cron: failed to send salesperson summaries for ${user.email} (${company.label}):`, err);
+          }
+        }
+
+        const settings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
+        let report = "skipped";
+
+        if (settings?.reportFrequency && settings.reportFrequency !== "manual") {
+          await sendDailyActivityReport(user);
+          report = settings.reportFrequency;
+        }
+
+        summary.push({
+          company: company.label,
+          email: user.email,
+          generated: generated.length,
+          processed,
+          report
+        });
       }
+    } catch (err) {
+      console.error(`Cron error processing company ${company.label}:`, err);
     }
-
-    const settings = database.dispatchSettings.find((entry) => entry.ownerId === workspace.configOwnerId);
-    let report = "skipped";
-
-    if (settings?.reportFrequency && settings.reportFrequency !== "manual") {
-      await sendDailyActivityReport(user);
-      report = settings.reportFrequency;
-    }
-
-    summary.push({
-      email: user.email,
-      generated: generated.length,
-      processed,
-      report
-    });
   }
 
   return NextResponse.json({ ok: true, summary });

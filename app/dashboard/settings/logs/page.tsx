@@ -28,6 +28,7 @@ export default async function SystemLogsPage() {
       title="System logs"
       description="Audit trail for login, logout, uploads, dispatch, password changes, users, reports, and templates."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

@@ -33,6 +33,7 @@ export default async function ManagersPage({
       title="Manager Directory"
       description="Manager profiles are automatically synced from your master database."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

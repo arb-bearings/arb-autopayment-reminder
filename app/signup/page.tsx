@@ -1,11 +1,32 @@
+"use client";
+
 import Link from "next/link";
 import { PasswordInput } from "@/components/password-input";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function SignupPage({
-  searchParams
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+const COMPANIES = [
+  { code: "ARB", label: "ARB Bearings" },
+  { code: "LUB", label: "ARB Lubricants" }
+] as const;
+
+function StatusBannerInner() {
+  const params = useSearchParams();
+  const error = params.get("error") || "";
+  const message = params.get("message") || "";
+
+  if (!error && !message) return null;
+
+  return (
+    <p className={`status-banner ${error ? "status-error" : "status-success"}`}>
+      {decodeURIComponent(error || message)}
+    </p>
+  );
+}
+
+export default function SignupPage() {
+  const [activeCompany, setActiveCompany] = useState<"ARB" | "LUB">("ARB");
+
   return (
     <main className="auth-shell">
       <section className="auth-layout">
@@ -38,16 +59,35 @@ export default function SignupPage({
           <p className="eyebrow">Signup</p>
           <h2>Launch your reminder workspace</h2>
           <p className="hero-copy">
-            After signup you land directly in the dashboard with starter rules and editable
-            templates ready to refine. The first account becomes admin automatically; later
-            signups join as normal users.
+            Select your company workspace to create your account in the isolated database.
           </p>
 
-          <StatusBanner searchParams={searchParams} />
+          {/* Company Workspace Tabs */}
+          <div className="company-tabs" role="tablist" aria-label="Company workspace">
+            {COMPANIES.map((c) => (
+              <button
+                key={c.code}
+                type="button"
+                role="tab"
+                aria-selected={activeCompany === c.code}
+                className={`company-tab${activeCompany === c.code ? " is-active" : ""}`}
+                onClick={() => setActiveCompany(c.code)}
+              >
+                <span className="company-tab-dot" />
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          <Suspense>
+            <StatusBannerInner />
+          </Suspense>
 
           <form action="/api/auth/signup" method="post" className="form-stack">
+            <input type="hidden" name="company" value={activeCompany} />
+
             <label className="field">
-              <span>Name</span>
+              <span>Full Name</span>
               <input name="name" type="text" placeholder="Aman Kumar" required />
             </label>
 
@@ -57,17 +97,12 @@ export default function SignupPage({
             </label>
 
             <label className="field">
-              <span>Company name</span>
-              <input name="companyName" type="text" placeholder="Northwind Finance" required />
-            </label>
-
-            <label className="field">
               <span>Password</span>
               <PasswordInput name="password" minLength={8} required />
             </label>
 
             <button className="button full-width" type="submit">
-              Create account
+              Create account in {COMPANIES.find((c) => c.code === activeCompany)?.label}
             </button>
           </form>
 
@@ -78,19 +113,4 @@ export default function SignupPage({
       </section>
     </main>
   );
-}
-
-async function StatusBanner({
-  searchParams
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const error = typeof params.error === "string" ? params.error : "";
-
-  if (!error) {
-    return null;
-  }
-
-  return <p className="status-banner status-error">{decodeURIComponent(error)}</p>;
 }

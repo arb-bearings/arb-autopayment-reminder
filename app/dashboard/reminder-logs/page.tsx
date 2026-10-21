@@ -20,6 +20,7 @@ export default async function ReminderLogsPage() {
       title="Reminder Logs"
       description="Track and inspect the history of sent reminders grouped by dealer. View elapsed days since last reminder, outstanding amounts, and individual invoice dispatches."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin={isAdmin}
       userRole={user.role}

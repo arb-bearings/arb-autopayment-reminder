@@ -4,13 +4,18 @@ import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { createDefaultRuleSet } from "@/lib/defaults";
 import { readDatabase, updateDatabase } from "@/lib/storage";
+import { ACTIVE_COMPANY_COOKIE, SUPPORTED_COMPANIES, normalizeCompanyCode } from "@/lib/company-workspace";
 import type { AuthEvent, User, UserRole } from "@/lib/types";
 
 const sessionCookieName = "apr_session";
+
+// Default workspace when no cookie is present
+const DEFAULT_COMPANY_CODE = "ARB" as const;
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 14;
 const superAdminAccessEmails = [
   "superadmin@example.com",
-  "arbbearings.marketing@gmail.com"
+  "arbbearings.marketing@gmail.com",
+  "arb.lubricants1@gmail.com"
 ];
 
 type SessionMetadata = {
@@ -83,12 +88,16 @@ export function extractRequestMetadata(request: Request): SessionMetadata {
   return { ipAddress, userAgent };
 }
 
-export async function registerUser(input: {
-  name: string;
-  email: string;
-  companyName: string;
-  password: string;
-}) {
+export async function registerUser(
+  input: {
+    name: string;
+    email: string;
+    companyName: string;
+    password: string;
+  },
+  explicitCompanyCode?: string
+) {
+  const companyCode = explicitCompanyCode ? normalizeCompanyCode(explicitCompanyCode) : "ARB";
   return updateDatabase(async (database) => {
     const existing = database.users.find(
       (user) => user.email.toLowerCase() === input.email.toLowerCase()
@@ -124,10 +133,11 @@ export async function registerUser(input: {
     }
 
     return user;
-  });
+  }, companyCode);
 }
 
-export async function createSession(userId: string, metadata?: SessionMetadata) {
+export async function createSession(userId: string, metadata?: SessionMetadata, explicitCompanyCode?: string) {
+  const companyCode = explicitCompanyCode ? normalizeCompanyCode(explicitCompanyCode) : "ARB";
   const token = randomBytes(32).toString("hex");
   await updateDatabase((database) => {
     const user = database.users.find((entry) => entry.id === userId);
@@ -158,11 +168,22 @@ export async function createSession(userId: string, metadata?: SessionMetadata) 
         details: metadata?.ipAddress?.trim() || "Unknown"
       });
     }
-  });
+  }, companyCode);
   return token;
 }
 
-export async function destroySession(token: string, metadata?: SessionMetadata) {
+export async function destroySession(token: string, metadata?: SessionMetadata, explicitCompanyCode?: string) {
+  let companyCode: string = explicitCompanyCode || "ARB";
+  if (!explicitCompanyCode) {
+    try {
+      const cookieStore = await cookies();
+      const val = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+      if (val) companyCode = normalizeCompanyCode(val);
+    } catch {
+      // outside request context
+    }
+  }
+
   await updateDatabase((database) => {
     const session = database.sessions.find((entry) => entry.token === token);
     const user = session
@@ -186,11 +207,12 @@ export async function destroySession(token: string, metadata?: SessionMetadata) 
     }
 
     database.sessions = database.sessions.filter((session) => session.token !== token);
-  });
+  }, companyCode);
 }
 
-export async function authenticateUser(email: string, password: string) {
-  const database = await readDatabase();
+export async function authenticateUser(email: string, password: string, explicitCompanyCode?: string) {
+  const companyCode = explicitCompanyCode ? normalizeCompanyCode(explicitCompanyCode) : "ARB";
+  const database = await readDatabase(companyCode);
   const user = database.users.find((entry) => entry.email === email.trim().toLowerCase());
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
@@ -208,7 +230,7 @@ export async function authenticateUser(email: string, password: string) {
         currentUser.canSendManualReminders = true;
         currentUser.updatedAt = updatedAt;
       }
-    });
+    }, companyCode);
 
     return {
       ...user,
@@ -229,7 +251,12 @@ export async function getCurrentUser() {
     return null;
   }
 
-  const database = await readDatabase();
+  const activeCompanyCookieValue = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+  const companyCode = activeCompanyCookieValue
+    ? normalizeCompanyCode(activeCompanyCookieValue)
+    : DEFAULT_COMPANY_CODE;
+
+  const database = await readDatabase(companyCode);
   const session = database.sessions.find(
     (entry) => entry.token === token && new Date(entry.expiresAt) > new Date()
   );
@@ -238,7 +265,16 @@ export async function getCurrentUser() {
     return null;
   }
 
-  return database.users.find((user) => user.id === session.userId) ?? null;
+  const user = database.users.find((u) => u.id === session.userId) ?? null;
+  if (!user) return null;
+
+  const companyMeta = SUPPORTED_COMPANIES.find((c) => c.code === companyCode) ?? SUPPORTED_COMPANIES[0];
+
+  return {
+    ...user,
+    companyCode,
+    companyName: companyMeta.fullName
+  };
 }
 
 export async function requireUser() {

@@ -24,6 +24,7 @@ export default async function EmailConfigurationPage({
       title="Email configuration"
       description="Configure SMTP, WhatsApp, SMS, report recipients, and schedule settings."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

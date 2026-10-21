@@ -1,11 +1,32 @@
+"use client";
+
 import Link from "next/link";
 import { PasswordInput } from "@/components/password-input";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function LoginPage({
-  searchParams
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+const COMPANIES = [
+  { code: "ARB", label: "ARB Bearings" },
+  { code: "LUB", label: "ARB Lubricants" }
+] as const;
+
+function StatusBannerInner() {
+  const params = useSearchParams();
+  const error = params.get("error") || "";
+  const message = params.get("message") || "";
+
+  if (!error && !message) return null;
+
+  return (
+    <p className={`status-banner ${error ? "status-error" : "status-success"}`}>
+      {decodeURIComponent(error || message)}
+    </p>
+  );
+}
+
+export default function LoginPage() {
+  const [activeCompany, setActiveCompany] = useState<"ARB" | "LUB">("ARB");
+
   return (
     <main className="auth-shell">
       <section className="auth-layout">
@@ -49,12 +70,34 @@ export default function LoginPage({
           <p className="eyebrow">Login</p>
           <h2>Access your reminder dashboard</h2>
           <p className="hero-copy">
-            Use the same workspace to keep invoices, contacts, rules, and queue activity in sync.
+            Select your company workspace, then sign in with your credentials.
           </p>
 
-          <StatusBanner searchParams={searchParams} />
+          {/* Company Workspace Tabs */}
+          <div className="company-tabs" role="tablist" aria-label="Company workspace">
+            {COMPANIES.map((c) => (
+              <button
+                key={c.code}
+                type="button"
+                role="tab"
+                aria-selected={activeCompany === c.code}
+                className={`company-tab${activeCompany === c.code ? " is-active" : ""}`}
+                onClick={() => setActiveCompany(c.code)}
+              >
+                <span className="company-tab-dot" />
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          <Suspense>
+            <StatusBannerInner />
+          </Suspense>
 
           <form action="/api/auth/login" method="post" className="form-stack">
+            {/* Hidden field carries the selected company to the server */}
+            <input type="hidden" name="company" value={activeCompany} />
+
             <label className="field">
               <span>Email</span>
               <input name="email" type="email" placeholder="you@company.com" required />
@@ -66,7 +109,7 @@ export default function LoginPage({
             </label>
 
             <button className="button full-width" type="submit">
-              Login
+              Login to {COMPANIES.find((c) => c.code === activeCompany)?.label}
             </button>
           </form>
 
@@ -76,25 +119,5 @@ export default function LoginPage({
         </section>
       </section>
     </main>
-  );
-}
-
-async function StatusBanner({
-  searchParams
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const error = typeof params.error === "string" ? params.error : "";
-  const message = typeof params.message === "string" ? params.message : "";
-
-  if (!error && !message) {
-    return null;
-  }
-
-  return (
-    <p className={`status-banner ${error ? "status-error" : "status-success"}`}>
-      {decodeURIComponent(error || message)}
-    </p>
   );
 }

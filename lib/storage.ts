@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { getMongoDatabase } from "@/lib/mongodb";
-import { buildEmailBody, buildWhatsappBody, buildSubject } from "@/lib/defaults";
+import { buildEmailBody, buildWhatsappBody, buildSubject, createDefaultRuleSet } from "@/lib/defaults";
 import { extractDealerCodeAndName, splitDealerCodeAndName } from "@/lib/dealer-utils";
+import { ACTIVE_COMPANY_COOKIE, normalizeCompanyCode, type CompanyCode, SUPPORTED_COMPANIES } from "@/lib/company-workspace";
 import type { AppDatabase } from "@/lib/types";
 
 const dbPath = path.join(process.cwd(), "data", "app-db.json");
@@ -550,8 +552,24 @@ async function readLegacyFileDatabase() {
   }
 }
 
-async function ensureDatabaseDocument() {
-  const database = await getMongoDatabase();
+async function resolveActiveCompanyCode(explicitCompanyCode?: string): Promise<CompanyCode> {
+  if (explicitCompanyCode) {
+    return normalizeCompanyCode(explicitCompanyCode);
+  }
+  try {
+    const cookieStore = await cookies();
+    const cookieValue = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value;
+    if (cookieValue) {
+      return normalizeCompanyCode(cookieValue);
+    }
+  } catch {
+    // cookies() may throw when called outside Next.js request lifecycle (e.g. standalone scripts)
+  }
+  return "ARB";
+}
+
+async function ensureDatabaseDocument(companyCode: CompanyCode = "ARB") {
+  const database = await getMongoDatabase(companyCode);
   const collection = database.collection<StoredDatabaseDocument>(collectionName);
   const existing = await collection.findOne({ _id: documentId });
 
@@ -559,11 +577,25 @@ async function ensureDatabaseDocument() {
     return collection;
   }
 
-  const legacyDatabase = await readLegacyFileDatabase();
+  // If ARB, migrate from legacy app-db.json if available
+  const legacyDatabase = companyCode === "ARB" ? await readLegacyFileDatabase() : null;
+
+  // Initial database setup
+  let initialDb: AppDatabase = legacyDatabase || defaultDatabase;
+  if (companyCode === "LUB" && !legacyDatabase) {
+    const defaults = createDefaultRuleSet("company:arb-lubricants");
+    initialDb = {
+      ...defaultDatabase,
+      reminderRules: defaults.rules,
+      templates: defaults.templates,
+      dispatchSettings: [defaults.dispatchSettings],
+      cashDiscountPolicies: defaults.cashDiscountPolicies
+    };
+  }
 
   await collection.insertOne({
     _id: documentId,
-    ...(legacyDatabase || defaultDatabase),
+    ...initialDb,
     migratedFromFileAt: legacyDatabase ? new Date().toISOString() : undefined,
     updatedAt: new Date().toISOString()
   });
@@ -582,6 +614,15 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
 
   const knownTriggerDays = new Set([30, 45, 60, 75, 80, 85, 90, 95, 100, 110, 120]);
 
+  // Old hardcoded company names that should be replaced with the {{senderCompany}} token
+  const LEGACY_COMPANY_NAMES = [
+    "ARB Bearings Limited",
+    "ARB Bearings Private Limited",
+    "ANS Bearings Private Limited",
+    "ANS Lubricants",
+    "ARB Lubricants"
+  ];
+
   const migratedTemplates = db.templates.map((template) => {
     const rule = ruleByTemplateId.get(template.id) || db.reminderRules.find((r) => r.id === template.ruleId);
     if (!rule) return template; // No linked rule — leave untouched
@@ -597,12 +638,22 @@ function migrateTemplates(db: AppDatabase): AppDatabase {
     const newWhatsappBody = buildWhatsappBody(rule.triggerDay);
     if (!newEmailBody) return template;
 
+    // Also patch any stored templates that still have hardcoded company names
+    let patchedEmailBody = template.emailBody;
+    let patchedWhatsappBody = template.whatsappBody;
+    let patchedSmsBody = template.smsBody;
+    for (const legacyName of LEGACY_COMPANY_NAMES) {
+      patchedEmailBody = patchedEmailBody.split(legacyName).join("{{senderCompany}}");
+      patchedWhatsappBody = patchedWhatsappBody.split(legacyName).join("{{senderCompany}}");
+      patchedSmsBody = patchedSmsBody.split(legacyName).join("{{senderCompany}}");
+    }
+
     return {
       ...template,
       emailSubject: buildSubject(rule.triggerDay),
       emailBody: newEmailBody,
-      whatsappBody: newWhatsappBody || template.whatsappBody,
-      smsBody: newWhatsappBody || template.smsBody
+      whatsappBody: newWhatsappBody || patchedWhatsappBody,
+      smsBody: newWhatsappBody || patchedSmsBody
     };
   });
 
@@ -622,42 +673,43 @@ function migrateCashDiscountPolicies(db: AppDatabase): AppDatabase {
   return { ...db, cashDiscountPolicies: migrated };
 }
 
-let readPromise: Promise<AppDatabase> | null = null;
-let cacheTimestamp = 0;
+const cacheMap = new Map<CompanyCode, { promise: Promise<AppDatabase>; timestamp: number }>();
 const CACHE_TTL_MS = 2000;
 
-export function readDatabase(): Promise<AppDatabase> {
+export async function readDatabase(explicitCompanyCode?: string): Promise<AppDatabase> {
+  const companyCode = await resolveActiveCompanyCode(explicitCompanyCode);
   const now = Date.now();
-  if (readPromise && (now - cacheTimestamp < CACHE_TTL_MS)) {
-    return readPromise;
+  const cached = cacheMap.get(companyCode);
+
+  if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.promise;
   }
 
-  cacheTimestamp = now;
-  readPromise = (async () => {
+  const promise = (async () => {
     try {
-      const collection = await ensureDatabaseDocument();
+      const collection = await ensureDatabaseDocument(companyCode);
       const document = await collection.findOne({ _id: documentId });
 
       if (!document) {
-        throw new Error("MongoDB app state document was not found.");
+        throw new Error(`MongoDB app state document was not found for company ${companyCode}.`);
       }
 
       const { _id, migratedFromFileAt, updatedAt, ...appDatabase } = document;
       // Normalize then apply auto-migration for cash discount policies
       const normalized = migrateCashDiscountPolicies(normalizeDatabase(appDatabase));
       
-      // If templatesMigrated has not been run for V3, run it once, save it back, and mark it done.
-      const hasMigrated = (document as any).templatesMigratedV3 === true;
+      // If templatesMigrated has not been run for V4, run it once, save it back, and mark it done.
+      // V4 replaces hardcoded company names with {{senderCompany}} token.
+      const hasMigrated = (document as any).templatesMigratedV4 === true;
       if (!hasMigrated) {
         const migrated = migrateTemplates(normalized);
-        // Write back immediately to mark as migrated
         await collection.updateOne(
           { _id: documentId },
           {
             $set: {
               templates: migrated.templates,
               cashDiscountPolicies: migrated.cashDiscountPolicies,
-              templatesMigratedV3: true,
+              templatesMigratedV4: true,
               updatedAt: new Date().toISOString()
             }
           }
@@ -667,16 +719,18 @@ export function readDatabase(): Promise<AppDatabase> {
 
       return normalized;
     } catch (err) {
-      readPromise = null;
+      cacheMap.delete(companyCode);
       throw err;
     }
   })();
 
-  return readPromise;
+  cacheMap.set(companyCode, { promise, timestamp: now });
+  return promise;
 }
 
-export async function writeDatabase(database: AppDatabase) {
-  const collection = await ensureDatabaseDocument();
+export async function writeDatabase(database: AppDatabase, explicitCompanyCode?: string) {
+  const companyCode = await resolveActiveCompanyCode(explicitCompanyCode);
+  const collection = await ensureDatabaseDocument(companyCode);
   const normalized = normalizeDatabase(database);
 
   await collection.updateOne(
@@ -691,13 +745,16 @@ export async function writeDatabase(database: AppDatabase) {
   );
 
   // Invalidate cache and update with the newly written data
-  readPromise = Promise.resolve(normalized);
-  cacheTimestamp = Date.now();
+  cacheMap.set(companyCode, { promise: Promise.resolve(normalized), timestamp: Date.now() });
 }
 
-export async function updateDatabase<T>(updater: (database: AppDatabase) => T | Promise<T>) {
-  const database = await readDatabase();
+export async function updateDatabase<T>(
+  updater: (database: AppDatabase) => T | Promise<T>,
+  explicitCompanyCode?: string
+) {
+  const companyCode = await resolveActiveCompanyCode(explicitCompanyCode);
+  const database = await readDatabase(companyCode);
   const result = await updater(database);
-  await writeDatabase(database);
+  await writeDatabase(database, companyCode);
   return result;
 }

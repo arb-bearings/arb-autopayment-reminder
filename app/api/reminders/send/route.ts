@@ -60,6 +60,9 @@ export async function POST(request: NextRequest) {
       throw new Error("Select at least one due record before dispatching reminders.");
     }
 
+    let logs: Awaited<ReturnType<typeof sendPendingReminders>> = [];
+    let skippedNote = "";
+
     if (selectedDueIds.length > 0 && ruleId) {
       const created = await createManualRemindersForDues(
         user.id,
@@ -68,42 +71,19 @@ export async function POST(request: NextRequest) {
         hasChannelOverride ? selectedChannels : undefined
       );
 
-      if (created.length === 0) {
-        throw new Error(
-          "None of the selected invoices have matching contacts in the master database. No reminders could be created or sent."
+      if (created.length > 0) {
+        logs = await sendPendingReminders(
+          user.id,
+          undefined,
+          created.map((entry) => entry.id)
         );
       }
 
-      const logs = await sendPendingReminders(
-        user.id,
-        undefined,
-        created.map((entry) => entry.id)
-      );
-
-      const salespersonSummaries = await sendSalespersonSummaries(user, logs);
-      const activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
-      const ownerReport = await sendDailyActivityReport(user);
-      await recordAuditLog(
-        user,
-        "Reminder Dispatch",
-        "success",
-        `Manual dispatch processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
-      );
-
       const skippedCount = selectedDueIds.length - created.length;
-      const skippedNote = skippedCount > 0 ? ` (skipped ${skippedCount} invoice${skippedCount === 1 ? "" : "s"} with no matched contact)` : "";
-
-      return makeResponse(
-        request,
-        `/dashboard/dues?message=${encodeURIComponent(
-          `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts${skippedNote}, sent ${activeSalespersonCount} salesperson summar${activeSalespersonCount === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
-        )}`,
-        logs.length
-      );
-    }
-
-    let logs;
-    if (isQueueSend) {
+      if (skippedCount > 0) {
+        skippedNote = ` (skipped ${skippedCount} invoice${skippedCount === 1 ? "" : "s"} with no matched contact)`;
+      }
+    } else if (isQueueSend) {
       if (logIds.length === 0) {
         throw new Error("Select at least one reminder from the queue before sending.");
       }
@@ -112,23 +92,22 @@ export async function POST(request: NextRequest) {
       logs = await sendPendingReminders(user.id);
     }
 
-    if (logs.length === 0) {
-      throw new Error("No pending reminders with matched contacts were found to send.");
-    }
-
+    // Always generate and send salesperson/manager summaries and owner activity report
     const salespersonSummaries = await sendSalespersonSummaries(user, logs);
     const activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
     const ownerReport = await sendDailyActivityReport(user);
+
     await recordAuditLog(
       user,
       "Reminder Dispatch",
       "success",
       `Processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
     );
+
     return makeResponse(
       request,
       `/dashboard/dues?message=${encodeURIComponent(
-        `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts, sent ${activeSalespersonCount} salesperson summar${activeSalespersonCount === 1 ? "y" : "ies"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+        `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts${skippedNote}, sent ${activeSalespersonCount} manager summary report${activeSalespersonCount === 1 ? "" : "s"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
       )}`,
       logs.length
     );

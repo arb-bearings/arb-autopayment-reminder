@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import nodemailer from "nodemailer";
 import {
   filterSharedCompanyRecords,
-  getCompanyWorkspaceContext
+  getCompanyWorkspaceContext,
+  SUPPORTED_COMPANIES
 } from "@/lib/company-workspace";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 import {
@@ -231,7 +232,7 @@ function buildPaymentSummary(due: DueRecord, allDuesForDealer: DueRecord[]): Pay
 }
 
 function buildReplacements(context: ReminderContext, senderCompany: string) {
-  const actualSenderCompany = "ARB Bearings Limited";
+  const actualSenderCompany = senderCompany || "ARB Bearings Private Limited";
   const extracted = extractDealerCodeAndName(
     context.due.dealerCode || context.due.customerCode || "",
     context.due.companyName || ""
@@ -1862,9 +1863,16 @@ export async function getEmailContentForLog(
     cdEvaluation.hasOlderUnpaid = log.eligibleAmount > log.cdAmount;
   }
 
-  // Find sender company name from workspace users
+  // Find sender company name from workspace users — resolve to the correct workspace company
   const workspaceUser = database.users.find((u: any) => u.companyName);
-  const senderCompany = workspaceUser?.companyName || "Your Company";
+  const rawCompanyName = workspaceUser?.companyName || "";
+  // Match against SUPPORTED_COMPANIES to get canonical full name (ARB Bearings or ARB Lubricants)
+  const matchedCompany = SUPPORTED_COMPANIES.find((c) =>
+    rawCompanyName.toLowerCase().includes(c.code.toLowerCase()) ||
+    rawCompanyName.toLowerCase().includes(c.slug.toLowerCase()) ||
+    rawCompanyName.toLowerCase() === c.fullName.toLowerCase()
+  );
+  const senderCompany = matchedCompany?.fullName || rawCompanyName || "ARB Bearings Private Limited";
 
   const replacements = buildReplacements(
     { due, contact, rule, template, cdEvaluation, billAgeDays: log.billAgeDays, paymentSummary },

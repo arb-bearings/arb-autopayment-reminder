@@ -68,6 +68,7 @@ export default async function DuesPage({
       title="Dues upload workspace"
       description="Upload your latest dues sheet once for the whole company, keep it in sync with master contacts, then choose when to generate and send reminders."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin={isAdmin}
       userRole={user.role}

@@ -27,6 +27,7 @@ export function DashboardClientShell({
   title,
   description,
   companyName,
+  companyCode,
   userName,
   isAdmin,
   userRole,
@@ -36,6 +37,7 @@ export function DashboardClientShell({
   title: string;
   description: string;
   companyName: string;
+  companyCode: string;
   userName: string;
   isAdmin: boolean;
   userRole: "super_admin" | "admin" | "user";
@@ -51,6 +53,8 @@ export function DashboardClientShell({
   const visibleAdminSections = adminSections.filter(
     (item) => !item.superAdminOnly || userRole === "super_admin"
   );
+  const isLubricants = companyCode === "LUB";
+  const companyLabel = isLubricants ? "ARB Lubricants" : "ARB Bearings";
   const navItems: Array<{ href: Route; label: string }> = [
     { href: "/dashboard", label: "Dashboard" },
     ...(isAdmin
@@ -115,6 +119,15 @@ export function DashboardClientShell({
             </div>
           </div>
 
+          {/* Company workspace active badge */}
+          <div className="sidebar-company-badge-container">
+            <div className={`sidebar-company-badge ${isLubricants ? "is-lubricants" : "is-bearings"}`}>
+              <span className="sidebar-company-dot" />
+              <span className="sidebar-company-badge-name">{companyLabel}</span>
+              <span className="sidebar-company-badge-pill">Workspace</span>
+            </div>
+          </div>
+
           <nav className="nav-list" aria-label="Dashboard sections">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
@@ -149,7 +162,13 @@ export function DashboardClientShell({
       <main className="dashboard-main">
         <section className="hero-panel dashboard-hero-panel">
           <div className="dashboard-hero-copy">
-            <p className="eyebrow">Workspace</p>
+            <div className="hero-eyebrow-row">
+              <p className="eyebrow">Workspace</p>
+              <span className={`company-hero-tag ${isLubricants ? "tag-lubricants" : "tag-bearings"}`}>
+                <span className="company-hero-dot" />
+                {companyLabel}
+              </span>
+            </div>
             <h1>{title}</h1>
             <p className="hero-copy">{description}</p>
           </div>

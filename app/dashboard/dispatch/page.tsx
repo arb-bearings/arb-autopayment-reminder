@@ -61,6 +61,7 @@ export default async function DispatchPage({
       title="Dispatch center"
       description="Generate reminders only when you choose, review the day-based queue, and send it when you are ready."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin={isAdmin}
       userRole={user.role}

@@ -6,6 +6,7 @@ export function DashboardShell({
   title,
   description,
   companyName,
+  companyCode,
   userName,
   isAdmin,
   userRole = "user",
@@ -15,6 +16,7 @@ export function DashboardShell({
   title: string;
   description: string;
   companyName: string;
+  companyCode?: string;
   userName: string;
   isAdmin: boolean;
   userRole?: "super_admin" | "admin" | "user";
@@ -25,6 +27,7 @@ export function DashboardShell({
       title={title}
       description={description}
       companyName={companyName}
+      companyCode={companyCode ?? "ARB"}
       userName={userName}
       isAdmin={isAdmin}
       userRole={userRole}

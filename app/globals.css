@@ -3217,6 +3217,169 @@ button:disabled {
   line-height: 1.5;
 }
 
+/* ─── Company Workspace Tabs (Login Page) ─────────────────────────────────── */
+
+.company-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.28rem;
+  background: rgba(22, 43, 82, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.company-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.company-tab:hover:not(.is-active) {
+  background: rgba(43, 97, 243, 0.06);
+  color: var(--blue-600);
+}
+
+.company-tab.is-active {
+  background: white;
+  border-color: var(--border-strong);
+  color: var(--navy-900);
+  box-shadow: 0 2px 8px rgba(22, 43, 82, 0.1);
+}
+
+.company-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  flex-shrink: 0;
+  transition: background 200ms ease;
+}
+
+.company-tab.is-active .company-tab-dot {
+  background: var(--blue-600);
+}
+
+/* ─── Sidebar Company Badge ────────────────────────────────────────────────── */
+
+.sidebar-company-badge-container {
+  margin: 0.75rem 0 0.5rem;
+}
+
+.sidebar-company-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  backdrop-filter: blur(8px);
+}
+
+.sidebar-company-badge.is-bearings {
+  border-left: 3px solid #3b82f6;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+}
+
+.sidebar-company-badge.is-lubricants {
+  border-left: 3px solid #f97316;
+  background: linear-gradient(90deg, rgba(249, 115, 22, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+}
+
+.sidebar-company-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.is-bearings .sidebar-company-dot {
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+}
+
+.is-lubricants .sidebar-company-dot {
+  background: #fb923c;
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.6);
+}
+
+.sidebar-company-badge-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f8fafc;
+  flex: 1;
+}
+
+.sidebar-company-badge-pill {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ─── Hero Eyebrow Row & Tag ───────────────────────────────────────────────── */
+
+.hero-eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.hero-eyebrow-row .eyebrow {
+  margin-bottom: 0;
+}
+
+.company-hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.company-hero-tag.tag-bearings {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.company-hero-tag.tag-lubricants {
+  background: rgba(249, 115, 22, 0.12);
+  color: #ea580c;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
+.company-hero-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 
 
 

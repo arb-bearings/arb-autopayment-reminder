@@ -51,10 +51,10 @@ async function main() {
     superadminSettings.smtpHost = env.SMTP_HOST || 'smtp.gmail.com';
     superadminSettings.smtpPort = parseInt(env.SMTP_PORT || '465', 10);
     superadminSettings.smtpSecure = env.SMTP_SECURE === 'true';
-    superadminSettings.smtpUser = env.SMTP_USER || 'amankumarschool7@gmail.com';
+    superadminSettings.smtpUser = env.SMTP_USER || '';
     superadminSettings.smtpPass = env.SMTP_PASS || '';
-    superadminSettings.senderEmail = env.SMTP_FROM || 'amankumarschool7@gmail.com';
-    superadminSettings.smtpFrom = env.SMTP_FROM || 'amankumarschool7@gmail.com';
+    superadminSettings.senderEmail = env.SMTP_FROM || '';
+    superadminSettings.smtpFrom = env.SMTP_FROM || '';
     superadminSettings.reportRecipients = [ 'amankumarschool7@gmail.com' ];
 
     console.log('Updating superadmin dispatch settings in MongoDB...');

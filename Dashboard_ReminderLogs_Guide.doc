@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="UTF-8">
+  <title>ARB Auto Payment Reminder – Dashboard & Reminder Logs Documentation</title>
+  <style>
+    body {
+      font-family: 'Calibri', Arial, sans-serif;
+      font-size: 11pt;
+      color: #1a1a2e;
+      margin: 2cm 2.5cm;
+      line-height: 1.6;
+    }
+    h1 {
+      font-size: 22pt;
+      color: #162b52;
+      border-bottom: 3px solid #162b52;
+      padding-bottom: 6px;
+      margin-top: 30px;
+    }
+    h2 {
+      font-size: 16pt;
+      color: #1b4aad;
+      margin-top: 28px;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: 4px;
+    }
+    h3 {
+      font-size: 13pt;
+      color: #162b52;
+      margin-top: 20px;
+    }
+    h4 {
+      font-size: 11pt;
+      color: #1b4aad;
+      margin-top: 14px;
+      margin-bottom: 4px;
+    }
+    p {
+      margin: 6px 0 10px 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 14px 0 20px 0;
+      font-size: 10.5pt;
+    }
+    th {
+      background-color: #162b52;
+      color: #ffffff;
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 7px 12px;
+      border: 1px solid #d1d9e6;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td {
+      background-color: #f1f5fb;
+    }
+    .kpi-box {
+      background: #eef3ff;
+      border-left: 4px solid #1b4aad;
+      padding: 10px 16px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .note-box {
+      background: #fff8e1;
+      border-left: 4px solid #f59e0b;
+      padding: 10px 16px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .info-box {
+      background: #e8f5e9;
+      border-left: 4px solid #28a745;
+      padding: 10px 16px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .danger-box {
+      background: #fff0f0;
+      border-left: 4px solid #dc3545;
+      padding: 10px 16px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    code {
+      background: #f4f6fa;
+      border: 1px solid #dde3ef;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 9.5pt;
+    }
+    .formula {
+      background: #f0f4ff;
+      border: 1px dashed #1b4aad;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 9.5pt;
+      margin: 8px 0;
+    }
+    .cover {
+      text-align: center;
+      margin: 60px 0 50px 0;
+    }
+    .cover h1 {
+      font-size: 28pt;
+      border: none;
+      color: #162b52;
+    }
+    .cover .subtitle {
+      font-size: 14pt;
+      color: #4a5568;
+      margin: 10px 0;
+    }
+    .cover .meta {
+      font-size: 10pt;
+      color: #718096;
+      margin-top: 20px;
+    }
+    hr {
+      border: none;
+      border-top: 2px solid #e2e8f0;
+      margin: 30px 0;
+    }
+    ul li {
+      margin-bottom: 5px;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== COVER PAGE ===== -->
+<div class="cover">
+  <h1>ARB Auto Payment Reminder</h1>
+  <div class="subtitle">Dashboard KPIs &amp; Reminder Logs<br>Complete Reference Guide</div>
+  <div class="meta">
+    Document Version: 1.0 &nbsp;|&nbsp; Prepared for: ARB Team<br>
+    Date: October 2026<br><br>
+    <em>This document explains every number, card, column, and indicator<br>
+    visible in your Dashboard and Reminder Logs pages — in plain language.</em>
+  </div>
+</div>
+
+<hr>
+
+<!-- ===== TABLE OF CONTENTS ===== -->
+<h2>Table of Contents</h2>
+<ol>
+  <li><strong>Dashboard Overview</strong></li>
+  <li><strong>Dashboard KPI Cards</strong> — What each number means &amp; how it is calculated</li>
+  <li><strong>Upcoming Dues Table</strong></li>
+  <li><strong>Latest Reminder Activity Table</strong></li>
+  <li><strong>Reminder Logs Page</strong></li>
+  <li><strong>Reminder Logs — Stats Bar</strong></li>
+  <li><strong>Reminder Logs — Dealer Card explained</strong></li>
+  <li><strong>Understanding "No Active Due Sheet"</strong></li>
+  <li><strong>Today's Generation Summary Widget</strong></li>
+  <li><strong>Quick Reference Glossary</strong></li>
+</ol>
+
+<hr class="page-break">
+
+<!-- ===== SECTION 1 ===== -->
+<h1>1. Dashboard Overview</h1>
+
+<p>The <strong>Dashboard</strong> is the first screen you see after logging in. It is your central command center that gives you a bird's-eye view of your entire payment collection operation — all in one place.</p>
+
+<p>The page is divided into three main areas:</p>
+<ul>
+  <li><strong>KPI Cards (Stats Grid)</strong> — 7–8 number tiles across the top showing live counts and amounts</li>
+  <li><strong>Upcoming Dues table</strong> — the 5 most urgent bills still due, sorted by due date</li>
+  <li><strong>Latest Reminder Activity table</strong> — the 6 most recent reminders generated or sent</li>
+</ul>
+
+<div class="note-box">
+  <strong>Note:</strong> If you are an <strong>Admin user</strong>, you will see one extra KPI card — "Master Contacts". Non-admin users only see their own data subset.
+</div>
+
+<hr>
+
+<!-- ===== SECTION 2 ===== -->
+<h1>2. Dashboard KPI Cards — Full Explanation</h1>
+
+<p>Below is every KPI card shown on the dashboard, what it tells you, and exactly how the system calculates it.</p>
+
+<!-- CARD 1 -->
+<h2>2.1 — Master Contacts <em>(Admin only)</em></h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The total number of companies/dealers saved in your Master Contact database.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>Every unique company row you have imported into your Master database (the contact book of all dealers/customers).</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>Simply counts all records in <code>masterContacts</code> that belong to your company workspace.</td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>If this number is low compared to your Due Records, it means many dealers don't have contact info — reminders for those will fail because there's no phone/email to send to.</td>
+  </tr>
+  <tr>
+    <td><strong>Clicking it goes to</strong></td>
+    <td>The Master Contacts management page where you can view/edit contact info.</td>
+  </tr>
+</table>
+
+<!-- CARD 2 -->
+<h2>2.2 — Due Records</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The total number of individual invoice/bill rows currently uploaded in your Due Sheet.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>Every single invoice row in your currently loaded Due Sheet. One invoice = one row = one record.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>Counts all records in <code>dueRecords</code> for your workspace. Formula: <code>dues.length</code></td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>Tells you how many invoices the system has loaded. If this is 0, no reminders can be generated — you need to upload a Due Sheet first.</td>
+  </tr>
+  <tr>
+    <td><strong>Clicking it goes to</strong></td>
+    <td>The full Due Records page where you can see all uploaded invoices.</td>
+  </tr>
+</table>
+
+<!-- CARD 3 -->
+<h2>2.3 — Pending Reminders</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The number of reminders that have been <em>generated</em> but not yet <em>sent</em>. These are sitting in the queue waiting for dispatch.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>All reminder log entries where <code>status = "pending"</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td><div class="formula">Count of all reminder logs WHERE status = "pending"</div></td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>This is your to-do list. If this number is high, it means you have reminders ready to go but haven't dispatched them yet. Go to the Dues page → Reminder Queue section to send them.</td>
+  </tr>
+  <tr>
+    <td><strong>Clicking it goes to</strong></td>
+    <td>The Due Records page, filtered to show only pending reminders in the queue.</td>
+  </tr>
+</table>
+
+<!-- CARD 4 -->
+<h2>2.4 — Sent Messages</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The total number of reminders successfully sent to date, broken down by channel (Email / WhatsApp / SMS).
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>All reminder log entries where <code>status = "sent"</code>. The sub-count shows how many went via Email, WhatsApp, and SMS separately.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>
+      <div class="formula">Total Sent = Count WHERE status = "sent"<br>
+      Email count = Sent WHERE channel = "email"<br>
+      WhatsApp count = Sent WHERE channel = "whatsapp"<br>
+      SMS count = Sent WHERE channel = "sms"</div>
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>Shows your overall reminder activity. The channel breakdown tells you which communication method is being used most for follow-ups.</td>
+  </tr>
+  <tr>
+    <td><strong>Clicking it goes to</strong></td>
+    <td>Due Records page filtered to show only sent reminders.</td>
+  </tr>
+</table>
+
+<!-- CARD 5 -->
+<h2>2.5 — Total Outstanding</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The total rupee value of all pending dues in your currently loaded Due Sheet. This is the total money your customers owe you right now.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>Adds up the <code>amount</code> field of every due record in your workspace.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>
+      <div class="formula">Total Outstanding = SUM of all due record "amount" values</div>
+      Displayed as Indian Rupees (₹) with proper formatting.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>This is the headline business number — the total receivables you need to collect. The goal is to reduce this by sending reminders and collecting payments.</td>
+  </tr>
+  <tr>
+    <td><strong>Clicking it goes to</strong></td>
+    <td>The full Due Records page.</td>
+  </tr>
+</table>
+
+<!-- CARD 6 -->
+<h2>2.6 — Today's Reminders</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The number of reminders that were successfully sent <em>on today's date only</em>.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>Reminder logs with <code>status = "sent"</code> where the sent date (or created date) matches today's date (YYYY-MM-DD).</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>
+      <div class="formula">Count WHERE status = "sent" AND (sentAt OR createdAt) starts with TODAY's date</div>
+      Example: If today is 15-Oct-2026, it counts all logs sent on 2026-10-15.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>Shows the day's activity at a glance. Useful to confirm that the batch of reminders you just dispatched actually went out.</td>
+  </tr>
+</table>
+
+<!-- CARD 7 -->
+<h2>2.7 — Success Rate</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The percentage of reminders that were successfully delivered out of all reminders that were either sent or failed.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>Ratio of successfully sent messages to total attempted (sent + failed). Pending messages are excluded from this calculation.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>
+      <div class="formula">Total Processed = Sent + Failed<br>
+Success Rate = ROUND( (Sent ÷ Total Processed) × 100 ) %<br><br>
+If Total Processed = 0, then Success Rate = 0%</div>
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>A high success rate (90%+) means your contact data is clean and delivery is working. A low rate means many reminders are failing — check your Master Contacts for missing emails/phone numbers.</td>
+  </tr>
+  <tr>
+    <td><strong>Example</strong></td>
+    <td>If 95 sent + 5 failed = 100 processed → Success Rate = 95%</td>
+  </tr>
+</table>
+
+<!-- CARD 8 -->
+<h2>2.8 — Failed Deliveries</h2>
+
+<div class="kpi-box">
+  <strong>What it shows:</strong> The total number of reminders that failed to deliver, plus the failure rate percentage.
+</div>
+
+<table>
+  <tr>
+    <th width="30%">Item</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td><strong>What it counts</strong></td>
+    <td>All reminder log entries where <code>status = "failed"</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>How calculated</strong></td>
+    <td>
+      <div class="formula">Failed Deliveries = Count WHERE status = "failed"<br>
+Failure Rate = ROUND( (Failed ÷ Total Processed) × 100 ) %</div>
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Why it matters</strong></td>
+    <td>Failures happen when a dealer doesn't have a valid email address or phone number in the Master database. The sub-label shows the failure rate %. Click this card to see which specific reminders failed.</td>
+  </tr>
+  <tr>
+    <td><strong>Action to take</strong></td>
+    <td>Go to Master Contacts and add missing contact details for the dealers whose reminders failed.</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- ===== SECTION 3 ===== -->
+<h1>3. Upcoming Dues Table</h1>
+
+<p>This table (bottom-left of the dashboard) shows the <strong>5 most urgent open invoices</strong>, sorted from the earliest due date to the latest.</p>
+
+<table>
+  <tr>
+    <th>Column</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td><strong>No.</strong></td>
+    <td>Row number (1 to 5)</td>
+  </tr>
+  <tr>
+    <td><strong>Company</strong></td>
+    <td>The dealer/customer company name for this invoice</td>
+  </tr>
+  <tr>
+    <td><strong>Invoice</strong></td>
+    <td>The invoice number or reference ID from your Due Sheet. Shows "N/A" if not available.</td>
+  </tr>
+  <tr>
+    <td><strong>Bill Age</strong></td>
+    <td>How many days old this bill is, calculated from the Bill Date (or Invoice Date) to today. Example: "45 days"</td>
+  </tr>
+  <tr>
+    <td><strong>Overdue</strong></td>
+    <td>How many days this bill has been overdue (past its due date). Shows "Current" if the due date hasn't passed yet. Example: "12 days" means it is 12 days past due.</td>
+  </tr>
+  <tr>
+    <td><strong>Due Date</strong></td>
+    <td>The date by which payment was expected for this invoice, as per your Due Sheet.</td>
+  </tr>
+  <tr>
+    <td><strong>Pending</strong></td>
+    <td>The outstanding amount for this specific invoice in Indian Rupees (₹).</td>
+  </tr>
+</table>
+
+<div class="info-box">
+  <strong>Bill Age vs Overdue — what's the difference?</strong><br>
+  <ul>
+    <li><strong>Bill Age</strong> = Days from when the bill was <em>raised</em> to today (tells you how old the invoice is).</li>
+    <li><strong>Overdue</strong> = Days from when payment was <em>due</em> to today (tells you how long the customer is late).</li>
+  </ul>
+  Example: Bill raised on 1 Sep, due on 30 Sep, today is 15 Oct → Bill Age = 44 days, Overdue = 15 days.
+</div>
+
+<hr>
+
+<!-- ===== SECTION 4 ===== -->
+<h1>4. Latest Reminder Activity Table</h1>
+
+<p>This table (bottom-right of the dashboard) shows the <strong>6 most recent reminder log entries</strong>, sorted from newest to oldest.</p>
+
+<table>
+  <tr>
+    <th>Column</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td><strong>No.</strong></td>
+    <td>Row number (1 to 6)</td>
+  </tr>
+  <tr>
+    <td><strong>Channel</strong></td>
+    <td>How the reminder was sent: Email 📧, WhatsApp 📱, or SMS 💬</td>
+  </tr>
+  <tr>
+    <td><strong>Recipient</strong></td>
+    <td>The email address or phone number the message was sent to. <strong>Only visible to Admin users.</strong> Non-admins see "Hidden" for privacy.</td>
+  </tr>
+  <tr>
+    <td><strong>Status</strong></td>
+    <td>
+      <code>pending</code> — Generated but not yet dispatched<br>
+      <code>sent</code> — Successfully delivered<br>
+      <code>failed</code> — Delivery failed (usually missing contact info)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Scheduled</strong></td>
+    <td>The date for which this reminder was generated (usually the date you clicked "Generate Reminders").</td>
+  </tr>
+</table>
+
+<hr class="page-break">
+
+<!-- ===== SECTION 5 ===== -->
+<h1>5. Reminder Logs Page</h1>
+
+<p>The <strong>Reminder Logs page</strong> (accessible from the sidebar) is your complete historical record of every reminder sent. It groups all sent reminders <strong>by dealer</strong>, so you can see the full payment follow-up history for each company.</p>
+
+<div class="note-box">
+  <strong>Important:</strong> The Reminder Logs page only shows reminders with <code>status = "sent"</code>. Pending and failed reminders are not shown here — they are in the Due Records queue.
+</div>
+
+<p>The page has three main parts:</p>
+<ol>
+  <li><strong>Stats Bar</strong> — 5 summary numbers at the top</li>
+  <li><strong>Search + Sort controls</strong> — to find specific dealers or sort by criteria</li>
+  <li><strong>Dealer Cards</strong> — one collapsible card per dealer, showing all their sent reminders</li>
+</ol>
+
+<hr>
+
+<!-- ===== SECTION 6 ===== -->
+<h1>6. Reminder Logs — Stats Bar</h1>
+
+<p>The 5 cards at the top of the Reminder Logs page give you a summary of all historical activity:</p>
+
+<table>
+  <tr>
+    <th width="35%">KPI Card</th>
+    <th>What it means</th>
+    <th width="30%">How calculated</th>
+  </tr>
+  <tr>
+    <td><strong>Dealers in History</strong></td>
+    <td>How many unique dealers/companies have received at least one reminder, ever. This persists even if their invoices have been paid and removed from the Due Sheet.</td>
+    <td>Count of unique dealer groups from all sent reminder logs</td>
+  </tr>
+  <tr>
+    <td><strong>Total Sent Reminders</strong></td>
+    <td>The grand total of all individual reminder messages sent across all time and all dealers.</td>
+    <td><code>Count WHERE status = "sent"</code> across all logs</td>
+  </tr>
+  <tr>
+    <td><strong>Avg Elapsed Days</strong></td>
+    <td>On average, how many days ago was the last reminder sent to each dealer. A high number means some dealers haven't been followed up recently.</td>
+    <td>
+      <div class="formula">Average of (Days between last sent date and today) for every dealer</div>
+      Rounded to 1 decimal place, shown as "X.X d"
+    </td>
+  </tr>
+  <tr>
+    <td><strong>In Cooldown (&lt; 5 Days)</strong> 🔴</td>
+    <td>How many dealers received a reminder <strong>within the last 5 days</strong>. These dealers are in a "cooldown" period — you should NOT send them another reminder yet to avoid spamming them.</td>
+    <td><code>Count of dealers WHERE daysElapsed &lt; 5</code></td>
+  </tr>
+  <tr>
+    <td><strong>Cooldown Over (≥ 5 Days)</strong> 🟢</td>
+    <td>How many dealers had their last reminder sent <strong>5 or more days ago</strong>. These dealers are ready to receive the next follow-up reminder.</td>
+    <td><code>Count of dealers WHERE daysElapsed ≥ 5</code></td>
+  </tr>
+</table>
+
+<div class="info-box">
+  <strong>What is the "5-Day Cooldown" rule?</strong><br>
+  The system enforces a minimum 5-day gap between reminders to the same dealer. This prevents you from accidentally spamming the same customer multiple times in quick succession. If a dealer was reminded 3 days ago, they are "In Cooldown" and the system will skip them when generating reminders.
+</div>
+
+<hr>
+
+<!-- ===== SECTION 7 ===== -->
+<h1>7. Reminder Logs — Dealer Card Explained</h1>
+
+<p>Each dealer has their own expandable card. Here is what every element on the card means:</p>
+
+<h3>7.1 Card Header (always visible)</h3>
+
+<table>
+  <tr>
+    <th width="35%">Element</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td><strong>Company Name</strong></td>
+    <td>The dealer's company name. Taken from the Due Sheet or Master Contacts.</td>
+  </tr>
+  <tr>
+    <td><strong>Code: [XXXXX]</strong></td>
+    <td>The dealer's unique code as imported from your Due Sheet (e.g., "ARB-123").</td>
+  </tr>
+  <tr>
+    <td><strong>📅 Last Sent</strong></td>
+    <td>The exact date and time of the most recent reminder sent to this dealer. Format: "15 Oct 2026, 10:30 AM".</td>
+  </tr>
+  <tr>
+    <td><strong>⏱️ Elapsed: X days ago</strong></td>
+    <td>How many days have passed since the last reminder. "0 days (Today)" means a reminder was sent today. This is shown in <span style="color:red">RED</span> if less than 5 days (still in cooldown) and <span style="color:green">GREEN</span> if 5+ days (ready for follow-up).</td>
+  </tr>
+  <tr>
+    <td><strong>⏳ Cooldown Active (Xd left) / ✅ Ready for Reminder</strong></td>
+    <td>
+      <strong>⏳ Cooldown Active</strong> (RED pill): Last reminder was sent within 5 days. Example: "Cooldown Active (3d left for 5-day window)" means you need to wait 3 more days.<br><br>
+      <strong>✅ Ready for Reminder</strong> (GREEN pill): 5+ days since the last reminder — you can safely send the next one.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>X Reminders (Y Inv)</strong></td>
+    <td>Total number of individual reminders sent to this dealer, and how many invoices those reminders covered. Example: "8 Reminders (3 Inv)" means 8 messages sent covering 3 different invoices.</td>
+  </tr>
+  <tr>
+    <td><strong>Manager: [Name]</strong></td>
+    <td>The salesperson or account manager assigned to this dealer, taken from the Due Sheet or Master Contacts. Shows "Unassigned" if not mapped.</td>
+  </tr>
+</table>
+
+<h3>7.2 Financial Panel (top-right of card)</h3>
+
+<table>
+  <tr>
+    <th width="35%">State</th>
+    <th>What is displayed</th>
+  </tr>
+  <tr>
+    <td><strong>Current Outstanding</strong></td>
+    <td>Shown when the dealer has active invoices in the currently loaded Due Sheet. The amount is the SUM of all their open invoice amounts from the live Due Sheet. If amount is ₹0, shows "Paid / ₹0".</td>
+  </tr>
+  <tr>
+    <td><strong>Last Recorded Total (Archived)</strong></td>
+    <td>Shown when the dealer does NOT have any invoices in the current Due Sheet. The amount shown is the highest outstanding amount recorded in any past reminder log for this dealer. Tagged as "(Archived)" because it's historical data.</td>
+  </tr>
+  <tr>
+    <td><strong>Historical Log</strong></td>
+    <td>Shown when no amount was recorded in any reminder log either. Very old or incomplete records.</td>
+  </tr>
+</table>
+
+<h3>7.3 Expanded Invoice Details (when you click to open the card)</h3>
+
+<p>When expanded, you see a table of every invoice for this dealer, with an audit trail of all reminders sent per invoice:</p>
+
+<table>
+  <tr>
+    <th>Column</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td><strong>Invoice Number</strong></td>
+    <td>The invoice/bill number from your Due Sheet.</td>
+  </tr>
+  <tr>
+    <td><strong>Bill Date</strong></td>
+    <td>The date the invoice was raised. If the invoice is no longer in the current Due Sheet, shows "Logged record" (historical).</td>
+  </tr>
+  <tr>
+    <td><strong>Bill Age</strong></td>
+    <td>How old the bill is (number of days from Bill Date to today). If the invoice was removed from the Due Sheet, shows the age as of when it was last seen.</td>
+  </tr>
+  <tr>
+    <td><strong>Outstanding / Status</strong></td>
+    <td>
+      If the invoice is still in the active Due Sheet: shows the outstanding amount (e.g., ₹45,000).<br>
+      If the invoice is paid: shows "Paid" in green.<br>
+      If the invoice is no longer in the Due Sheet: shows the last recorded amount tagged as "(Recorded)" in grey.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Sent Reminders Audit Trail</strong></td>
+    <td>Every individual reminder ever sent for this invoice, from newest to oldest. Each entry shows:
+      <ul>
+        <li>📧/📱/💬 <strong>Channel</strong> and recipient address</li>
+        <li><strong>Trigger Rule</strong>: which reminder rule fired (e.g., "Trigger: 30d Rule" means the 30-day ageing rule)</li>
+        <li><strong>Date/Time</strong> it was sent</li>
+        <li><strong>Time elapsed</strong> since that specific reminder (e.g., "5d ago" or "Today (0d)")</li>
+        <li><strong>View Msg button</strong>: Click to see the full message text that was sent</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<hr class="page-break">
+
+<!-- ===== SECTION 8 ===== -->
+<h1>8. Understanding "No Active Due Sheet"</h1>
+
+<div class="danger-box">
+  <strong>You asked specifically about this label seen under a dealer's amount in Reminder Logs:</strong><br><br>
+  <em>"₹92,932.91 (Archived)"</em><br>
+  <em>No Active Due Sheet</em>
+</div>
+
+<h2>8.1 — What does "No Active Due Sheet" mean?</h2>
+
+<p>This label appears under a dealer's outstanding amount in the Reminder Logs when the system cannot find that dealer in your <strong>currently loaded Due Sheet</strong>.</p>
+
+<p>In simple language: <strong>The system remembers that you sent this dealer a reminder before, but right now their invoice is not present in the due records file you have uploaded.</strong></p>
+
+<h2>8.2 — Why does this happen?</h2>
+
+<table>
+  <tr>
+    <th width="5%">#</th>
+    <th width="40%">Reason</th>
+    <th>Explanation</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td><strong>Payment was received &amp; removed</strong></td>
+    <td>The most common reason. The dealer paid their bill. You updated your Due Sheet and removed their invoice. The reminder log still exists as a historical record, but the invoice is gone from the active sheet.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><strong>New Due Sheet uploaded</strong></td>
+    <td>You uploaded a fresh Due Sheet that doesn't include this particular dealer (maybe they cleared their balance, or they weren't due this month).</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><strong>Dealer code/name changed</strong></td>
+    <td>The dealer's code or company name in your new Due Sheet is slightly different from what was recorded in the old reminder log. The system can't match them, so it shows "No Active Due Sheet" even though the dealer might actually still owe money.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><strong>Invoice settled in ERP but not yet re-uploaded</strong></td>
+    <td>The invoice was marked as paid in your accounting system and is no longer part of the dues — but the reminder history remains.</td>
+  </tr>
+</table>
+
+<h2>8.3 — What does "(Archived)" mean on the amount?</h2>
+
+<p>When "No Active Due Sheet" is shown, the amount displayed (e.g., <strong>₹92,932.91 (Archived)</strong>) is:</p>
+
+<div class="kpi-box">
+  The <strong>highest outstanding amount</strong> that was ever recorded in any reminder log sent to this dealer. It is the <em>last known balance</em> at the time the reminder was dispatched — not necessarily the current balance.
+</div>
+
+<p>The system picks the maximum <code>totalOutstanding</code> or <code>relevantAmount</code> value ever logged for this dealer across all their sent reminders.</p>
+
+<div class="formula">Archived Amount = MAX(totalOutstanding, relevantAmount) across all sent reminder logs for this dealer</div>
+
+<h2>8.4 — Should you be worried?</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>What to do</th>
+  </tr>
+  <tr>
+    <td>Dealer paid — you removed them from the Due Sheet</td>
+    <td>✅ This is expected. The "No Active Due Sheet" label is correct and normal. The history is preserved for audit purposes.</td>
+  </tr>
+  <tr>
+    <td>Dealer still owes money but is not in your Due Sheet</td>
+    <td>⚠️ Check your Due Sheet. You may need to re-upload a fresh version that includes this dealer's invoices, or verify if the invoice was accidentally removed.</td>
+  </tr>
+  <tr>
+    <td>Dealer is in Due Sheet but still showing "No Active Due Sheet"</td>
+    <td>⚠️ Possible name/code mismatch. Check if the dealer code in your Due Sheet exactly matches the one in the reminder log. Even a small difference (e.g., spaces, dashes) can prevent the match.</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- ===== SECTION 9 ===== -->
+<h1>9. Today's Generation Summary Widget</h1>
+
+<p>This widget appears on the Dues page after you click "Generate Eligible Reminders." It shows you a live summary of what was generated in today's batch.</p>
+
+<h3>9.1 Summary Pills (visible on the widget)</h3>
+
+<table>
+  <tr>
+    <th width="35%">Pill</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td><strong>Total Generated</strong></td>
+    <td>How many reminder entries were created in the current generation run (both matched and unmatched contacts).</td>
+  </tr>
+  <tr>
+    <td><strong>🟢 Contacts Matched</strong></td>
+    <td>How many of those generated reminders have a valid contact in Master Contacts — meaning the system found an email/phone and the message CAN be sent.</td>
+  </tr>
+  <tr>
+    <td><strong>⚠️ Contacts Missing</strong></td>
+    <td>How many generated reminders do NOT have a valid contact — the system couldn't find an email or phone number for the dealer. These will fail if dispatched.</td>
+  </tr>
+</table>
+
+<h3>9.2 Clicking "View Breakdown Table ↗" opens a modal with these KPIs:</h3>
+
+<table>
+  <tr>
+    <th>KPI</th>
+    <th>What it shows</th>
+    <th>How calculated</th>
+  </tr>
+  <tr>
+    <td><strong>Total Reminders</strong></td>
+    <td>All reminders generated today (both matched and missing)</td>
+    <td>Count of all reminder logs from today's generation</td>
+  </tr>
+  <tr>
+    <td><strong>Matched Contacts</strong></td>
+    <td>Reminders where a valid Master Contact was found AND a valid recipient address exists for the chosen channel</td>
+    <td>Count where <code>isMatched = true</code></td>
+  </tr>
+  <tr>
+    <td><strong>Missing Contacts</strong></td>
+    <td>Reminders where no Master Contact could be found, or the contact exists but has no email/phone for the chosen channel</td>
+    <td>Total − Matched</td>
+  </tr>
+  <tr>
+    <td><strong>Pending Queue</strong></td>
+    <td>Reminders that are matched and ready to be dispatched (status = "pending")</td>
+    <td>Count where <code>status = "pending"</code></td>
+  </tr>
+  <tr>
+    <td><strong>Total Amount</strong></td>
+    <td>Sum of outstanding amounts covered by today's generated reminders</td>
+    <td>SUM of <code>relevantAmount</code> or <code>totalOutstanding</code> for all generated logs</td>
+  </tr>
+</table>
+
+<h3>9.3 Table columns in the breakdown modal</h3>
+
+<table>
+  <tr>
+    <th>Column</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td><strong>Invoice No.</strong></td>
+    <td>Invoice number from Due Sheet. "Age: X days" below it shows the bill age.</td>
+  </tr>
+  <tr>
+    <td><strong>Dealer Name &amp; Code</strong></td>
+    <td>The company name and dealer code from the Due Sheet.</td>
+  </tr>
+  <tr>
+    <td><strong>Ageing Stage</strong></td>
+    <td>Which reminder bucket this invoice falls into (e.g., "30-45 Days", "60+ Days"). Determined by the reminder rules configured in Settings.</td>
+  </tr>
+  <tr>
+    <td><strong>Contact Person</strong></td>
+    <td>The primary contact name from Master Contacts, or "Accounts Team" as fallback.</td>
+  </tr>
+  <tr>
+    <td><strong>Contact Match Status</strong></td>
+    <td>
+      🟢 <strong>Matched</strong>: A valid Master Contact was found with required contact info.<br>
+      🔴 <strong>Missing Contact</strong>: No matching contact, or contact has no valid email/phone for this channel.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Channel &amp; Recipient</strong></td>
+    <td>Which channel (Email/WhatsApp/SMS) and who it will be sent to. Hidden for non-admin users.</td>
+  </tr>
+  <tr>
+    <td><strong>Amount</strong></td>
+    <td>The relevant outstanding amount for this specific reminder. If total outstanding differs, it's shown below as "Total: ₹X".</td>
+  </tr>
+  <tr>
+    <td><strong>Status</strong></td>
+    <td><code>pending</code> / <code>sent</code> / <code>failed</code></td>
+  </tr>
+  <tr>
+    <td><strong>Failure / Note</strong></td>
+    <td>If missing contact: explains why (e.g., "No matching master contact in database" or "Missing email address in master contact"). If sent: shows "Delivered". If pending: shows "Queued for dispatch".</td>
+  </tr>
+</table>
+
+<hr class="page-break">
+
+<!-- ===== SECTION 10 ===== -->
+<h1>10. Quick Reference Glossary</h1>
+
+<table>
+  <tr>
+    <th width="30%">Term</th>
+    <th>Definition</th>
+  </tr>
+  <tr>
+    <td><strong>Due Sheet</strong></td>
+    <td>The Excel file you upload containing all outstanding invoices. Each row = one invoice. This is the "current" list of who owes you money.</td>
+  </tr>
+  <tr>
+    <td><strong>Master Contacts</strong></td>
+    <td>The Excel file containing dealer company profiles — email addresses, WhatsApp numbers, SMS numbers, and contact person names. Used to know WHERE to send reminders.</td>
+  </tr>
+  <tr>
+    <td><strong>Reminder Log</strong></td>
+    <td>A record of every reminder that was generated (and possibly sent). Each reminder has a status: pending, sent, or failed.</td>
+  </tr>
+  <tr>
+    <td><strong>Generation</strong></td>
+    <td>The process of creating reminder entries in the system for all eligible invoices. Does not send anything — just prepares the queue.</td>
+  </tr>
+  <tr>
+    <td><strong>Dispatch</strong></td>
+    <td>The actual sending of reminder messages via Email, WhatsApp, or SMS to dealers.</td>
+  </tr>
+  <tr>
+    <td><strong>Bill Age</strong></td>
+    <td>Number of days since the invoice was raised (Bill Date → Today).</td>
+  </tr>
+  <tr>
+    <td><strong>Overdue Days</strong></td>
+    <td>Number of days the payment is past its due date (Due Date → Today). 0 or negative = still current.</td>
+  </tr>
+  <tr>
+    <td><strong>Cooldown (5-day rule)</strong></td>
+    <td>A minimum 5-day gap enforced between reminders to the same dealer. Prevents spam and maintains professionalism.</td>
+  </tr>
+  <tr>
+    <td><strong>Pending</strong></td>
+    <td>Reminder generated and waiting to be dispatched (in the queue).</td>
+  </tr>
+  <tr>
+    <td><strong>Sent</strong></td>
+    <td>Reminder successfully delivered to the dealer via the chosen channel.</td>
+  </tr>
+  <tr>
+    <td><strong>Failed</strong></td>
+    <td>Reminder could not be delivered — usually because of missing or invalid contact details.</td>
+  </tr>
+  <tr>
+    <td><strong>Matched Contact</strong></td>
+    <td>The system successfully found the dealer in Master Contacts AND found a valid address (email/phone) for the reminder channel.</td>
+  </tr>
+  <tr>
+    <td><strong>Missing Contact</strong></td>
+    <td>The dealer exists in the Due Sheet but has no matching row in Master Contacts, OR the Master Contact entry is missing the required email/phone number.</td>
+  </tr>
+  <tr>
+    <td><strong>Archived</strong></td>
+    <td>Historical data — the last known balance from old reminder logs, shown when the dealer is no longer in the current active Due Sheet.</td>
+  </tr>
+  <tr>
+    <td><strong>No Active Due Sheet</strong></td>
+    <td>The dealer has reminder history but their invoices are not present in the currently loaded Due Sheet (paid up, removed, or name mismatch).</td>
+  </tr>
+  <tr>
+    <td><strong>Ageing Stage</strong></td>
+    <td>Which "bucket" an invoice falls into based on how old it is (e.g., 30-45 Days, 46-60 Days, 60+ Days). Configured in Rules/Settings.</td>
+  </tr>
+  <tr>
+    <td><strong>Trigger Rule</strong></td>
+    <td>The specific reminder rule (based on bill age in days) that caused a reminder to be generated. Example: "30d Rule" = triggered because the bill is 30+ days old.</td>
+  </tr>
+  <tr>
+    <td><strong>Days Elapsed</strong></td>
+    <td>How many days have passed since the last reminder was sent to a dealer.</td>
+  </tr>
+  <tr>
+    <td><strong>Success Rate</strong></td>
+    <td>Percentage of reminders successfully delivered out of all attempted (sent + failed). Pending reminders are excluded.</td>
+  </tr>
+  <tr>
+    <td><strong>Failure Rate</strong></td>
+    <td>Percentage of reminders that failed out of all attempted. High failure rate = update your Master Contacts.</td>
+  </tr>
+  <tr>
+    <td><strong>Total Outstanding</strong></td>
+    <td>The sum of all outstanding amounts in the current Due Sheet — total receivables from all dealers combined.</td>
+  </tr>
+</table>
+
+<hr>
+
+<p style="text-align:center; color: #718096; font-size: 9pt; margin-top: 30px;">
+  ARB Auto Payment Reminder System &nbsp;|&nbsp; Dashboard &amp; Reminder Logs Reference Guide &nbsp;|&nbsp; v1.0 &nbsp;|&nbsp; October 2026<br>
+  <em>This document was auto-generated from the live application source code.</em>
+</p>
+
+</body>
+</html>

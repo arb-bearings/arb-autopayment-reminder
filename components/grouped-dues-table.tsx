@@ -87,10 +87,26 @@ export function GroupedDuesTable({
       }
     }
 
-    return Object.entries(groups).map(([key, data]) => ({
-      key,
-      ...data
-    }));
+    const getInvBucket = (age: number) => {
+      if (age > 120) return 0;
+      if (age > 90) return 1;
+      if (age > 60) return 2;
+      return 3;
+    };
+
+    return Object.entries(groups).map(([key, data]) => {
+      const sortedInvoices = [...data.invoices].sort((a, b) => {
+        const ageA = getBillAgeDays(a.billDate || a.invoiceDate, today) || 0;
+        const ageB = getBillAgeDays(b.billDate || b.invoiceDate, today) || 0;
+        const diff = getInvBucket(ageA) - getInvBucket(ageB);
+        return diff !== 0 ? diff : ageB - ageA;
+      });
+      return {
+        key,
+        ...data,
+        invoices: sortedInvoices
+      };
+    });
   }, [dueRecords, today]);
 
   // Filter based on search query

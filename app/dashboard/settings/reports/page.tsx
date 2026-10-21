@@ -34,6 +34,7 @@ export default async function ReportsPage({
       title="Reports and analytics"
       description="Generate daily activity reports and review outstanding dealer analytics."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

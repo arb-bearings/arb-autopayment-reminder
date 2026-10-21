@@ -24,6 +24,7 @@ export default async function SalespersonPage({
       title="Manager configuration"
       description="Manage manager profiles, dealer-code mappings, and back office CC settings."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

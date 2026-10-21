@@ -81,6 +81,7 @@ export default async function MessageTemplatesPage({
       title="Message templates"
       description="Manage reminder rules, channels, and placeholder-based message bodies."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

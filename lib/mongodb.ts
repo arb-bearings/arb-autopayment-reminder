@@ -1,4 +1,5 @@
 import { MongoClient, type Db } from "mongodb";
+import { normalizeCompanyCode, type CompanyCode } from "@/lib/company-workspace";
 
 declare global {
   var __mongoClientPromise__: Promise<MongoClient> | undefined;
@@ -13,7 +14,7 @@ function getClientPromise() {
 
   if (!global.__mongoClientPromise__) {
     const promise = new MongoClient(mongoUri, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000,
       retryWrites: true,
       retryReads: true
     }).connect();
@@ -29,8 +30,16 @@ function getClientPromise() {
   return global.__mongoClientPromise__;
 }
 
-export async function getMongoDatabase(): Promise<Db> {
+export function getDatabaseNameForCompany(companyCode?: string): string {
+  const code = normalizeCompanyCode(companyCode || "");
+  if (code === "LUB") {
+    return process.env.MONGODB_DB_LUBRICANTS || "auto-payment-reminder-lubricants";
+  }
+  return process.env.MONGODB_DB || "auto-payment-reminder";
+}
+
+export async function getMongoDatabase(companyCode?: string): Promise<Db> {
   const client = await getClientPromise();
-  const mongoDatabaseName = process.env.MONGODB_DB || "auto-payment-reminder";
+  const mongoDatabaseName = getDatabaseNameForCompany(companyCode);
   return client.db(mongoDatabaseName);
 }

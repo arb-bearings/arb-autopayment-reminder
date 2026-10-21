@@ -36,6 +36,7 @@ export default async function DashboardOverview({
       title="Reminder command center"
       description="Track your imported records, check upcoming dues, and see the latest reminder activity."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin={isAdmin}
       userRole={user.role}

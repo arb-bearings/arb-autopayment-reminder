@@ -5,12 +5,15 @@ export type User = {
   name: string;
   email: string;
   companyName: string;
+  /** Resolved from the active workspace cookie — "ARB" or "LUB". Not persisted to DB. */
+  companyCode?: string;
   passwordHash: string;
   role: UserRole;
   canSendManualReminders: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
 
 export type Session = {
   token: string;

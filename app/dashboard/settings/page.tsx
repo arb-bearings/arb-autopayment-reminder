@@ -35,6 +35,7 @@ export default async function AdminPanelPage({
       title="Admin panel"
       description="Section-based controls for users, passwords, databases, reminders, reporting, and logs."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

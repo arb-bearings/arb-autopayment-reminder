@@ -165,6 +165,14 @@ export function buildDailyActivityReportHtml(input: {
     { dealerLabel: "DEALERS IN 30 DAYS", min: 30, max: 44 },
   ];
 
+  // Active dealer sets derived strictly from the current updated due sheet
+  const activeDealerCodes = new Set(
+    dues.map((d) => (d.dealerCode || d.customerCode || "").trim().toLowerCase()).filter(Boolean)
+  );
+  const activeDealerNames = new Set(
+    dues.map((d) => (d.companyName || "").trim().toLowerCase()).filter(Boolean)
+  );
+
   // Returns unique dealer count, total outstanding, and reminders sent today for a bucket
   const getBucketInfo = (minAge: number, maxAge: number) => {
     const matchingRules = (rules || []).filter(r => r.triggerDay >= minAge && r.triggerDay <= maxAge);
@@ -175,7 +183,9 @@ export function buildDailyActivityReportHtml(input: {
     );
     const remindersSentToday = sentTodayLogs.length;
 
-    const ruleDealerCodes = Array.from(new Set(sentTodayLogs.map(log => log.dealerCode).filter(Boolean)));
+    // Filter strictly to dealers currently active in the updated due sheet
+    const ruleDealerCodes = Array.from(new Set(sentTodayLogs.map(log => log.dealerCode).filter(Boolean)))
+      .filter((code) => activeDealerCodes.has(code.trim().toLowerCase()) || activeDealerNames.has(code.trim().toLowerCase()));
     const dealerCount = ruleDealerCodes.length;
 
     // Sum of ALL open dues for these dealers (accounting for entire dealer outstanding, not just single invoices)
@@ -424,10 +434,26 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
   const database = await readDatabase();
   const workspace = getCompanyWorkspaceContextForUser(database, user);
   const day = reportDate.toISOString().slice(0, 10);
-  const logs = filterSharedCompanyRecords(database.reminderLogs, workspace.sharedOwnerIds);
-  const todayLogs = logs.filter((entry) => logDay(entry) === day);
   const dues = filterSharedCompanyRecords(database.dueRecords, workspace.sharedOwnerIds)
     .filter((due) => (due.amount || 0) > 0);
+
+  // Active dealer identifiers present strictly in the updated due sheet
+  const activeDealerCodes = new Set(
+    dues.map((d) => (d.dealerCode || d.customerCode || "").trim().toLowerCase()).filter(Boolean)
+  );
+  const activeDealerNames = new Set(
+    dues.map((d) => (d.companyName || "").trim().toLowerCase()).filter(Boolean)
+  );
+
+  const logs = filterSharedCompanyRecords(database.reminderLogs, workspace.sharedOwnerIds);
+  // Strict scope: only include logs for dealers actively present in the updated due sheet
+  const todayLogs = logs.filter((entry) => {
+    if (logDay(entry) !== day) return false;
+    const code = (entry.dealerCode || "").trim().toLowerCase();
+    const name = (entry.dealerName || "").trim().toLowerCase();
+    return (code && activeDealerCodes.has(code)) || (name && activeDealerNames.has(name));
+  });
+
   const dealerGroups = groupBy(dues, (entry) => entry.companyName || entry.dealerCode);
   const salespersonGroups = groupBy(dues, (entry) => entry.salespersonName || entry.salespersonEmail);
   const failedLogs = todayLogs.filter((entry) => entry.status === "failed");
@@ -519,239 +545,148 @@ export async function sendDailyActivityReport(user: ReportUser, reportDate = new
   return { ...result, report };
 }
 
-export function buildSalespersonSummaryText(name: string, dues: DueRecord[], sentLogs: ReminderLog[], rules?: ReminderRule[]) {
+export function buildSalespersonSummaryText(
+  name: string,
+  dues: DueRecord[],
+  sentLogs: ReminderLog[] = [],
+  rules?: ReminderRule[]
+) {
   const currency = dues[0]?.currency || "INR";
+  const today = new Date();
+  const totalOutstanding = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const totalInvoices = dues.length;
 
-  const brackets = [
-    { label: "More than 180 Days", min: 181, max: Infinity },
-    { label: "Between 120 and 180 Days", min: 120, max: 180 },
-    { label: "Between 90 and 120 Days", min: 90, max: 120 },
-    { label: "90 Days", min: 89, max: 90 },
-    { label: "75 Days", min: 75, max: 89 },
-    { label: "60 Days", min: 60, max: 74 },
-    { label: "45 Days", min: 45, max: 59 },
-    { label: "30 Days", min: 30, max: 44 }
+  // Group by dealer
+  const dealerMap = new Map<string, DueRecord[]>();
+  for (const due of dues) {
+    const key = (due.companyName || due.dealerCode || "Unknown Dealer").trim();
+    if (!dealerMap.has(key)) dealerMap.set(key, []);
+    dealerMap.get(key)!.push(due);
+  }
+
+  // 5 Aging stage definitions (based strictly on oldest invoice of the dealer)
+  const bucketDefs = [
+    { label: "120+ Days", min: 121, max: Infinity },
+    { label: "90-120 Days", min: 91, max: 120 },
+    { label: "60-90 Days", min: 61, max: 90 },
+    { label: "30-60 Days", min: 31, max: 60 },
+    { label: "0-30 Days", min: 0, max: 30 },
   ];
 
-  const sectionsText = brackets.map((bracket) => {
-    const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
-    const ruleIds = matchingRules.map(r => r.id);
-    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
+  function getStageIndex(age: number) {
+    if (age > 120) return 0;
+    if (age > 90)  return 1;
+    if (age > 60)  return 2;
+    if (age > 30)  return 3;
+    return 4;
+  }
 
-    // Only show sections with activity today
-    if (ruleLogs.length === 0) {
-      return "";
-    }
-
-    const ruleDealerCodes = Array.from(new Set(ruleLogs.map(log => log.dealerCode).filter(Boolean)));
-    const assignedDealersCount = ruleDealerCodes.length;
-    const sentTodayCount = ruleLogs.length;
-
-    const matchingDueIds = new Set<string>();
-    ruleLogs.forEach((log) => {
-      if (log.dueId) matchingDueIds.add(log.dueId);
-      if (Array.isArray(log.invoiceIdsInvolved)) {
-        log.invoiceIdsInvolved.forEach((id: string) => id && matchingDueIds.add(id));
-      }
-    });
-
-    const ruleDealerCodeSet = new Set(
-      ruleLogs.map((log) => (log.dealerCode || "").trim().toLowerCase()).filter(Boolean)
-    );
-    const ruleDealerNameSet = new Set(
-      ruleLogs.map((log) => (log.dealerName || "").trim().toLowerCase()).filter(Boolean)
-    );
-
-    const ruleDues = dues.filter((due) => {
-      if (matchingDueIds.has(due.id)) {
-        return true;
-      }
-      const dCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
-      const dName = (due.companyName || "").trim().toLowerCase();
-      const matchesDealer = (dCode && ruleDealerCodeSet.has(dCode)) || (dName && ruleDealerNameSet.has(dName));
-      if (!matchesDealer) {
-        return false;
-      }
-      const age = getBillAgeDays(due.billDate || due.invoiceDate, new Date());
-      if (age === null) return false;
-      return age >= bracket.min && age <= bracket.max;
-    });
-
-    const paymentDueAmount = ruleDues.reduce((sum, d) => sum + (d.amount || 0), 0);
-
-    // Group ruleDues by dealer
-    const dealerMap = new Map<string, typeof ruleDues>();
-    for (const due of ruleDues) {
-      const key = due.companyName || due.dealerCode || "Unknown";
-      if (!dealerMap.has(key)) dealerMap.set(key, []);
-      dealerMap.get(key)!.push(due);
-    }
-
-    const lines = Array.from(dealerMap.entries()).map(([dealerName, groupDues]) => {
-      const dueDates = groupDues.map(d => d.dueDate ? formatDate(d.dueDate) : "-").join(", ");
-      const invoiceNos = groupDues.map(d => d.invoiceNumber || d.reference || "-").join(", ");
-      const totalOutstanding = groupDues.reduce((sum, d) => sum + (d.amount || 0), 0);
-      const matchingLog = ruleLogs.find((l) => groupDues.some(gd => gd.id === l.dueId || (Array.isArray(l.invoiceIdsInvolved) && l.invoiceIdsInvolved.includes(gd.id))));
-      const pdfUrlStr = matchingLog?.pdfUrl ? ` | PDF: ${matchingLog.pdfUrl}` : "";
-      return ` - Dealer: ${dealerName} | Total Invoices: ${groupDues.length} | Due: ${dueDates} | Invoices: ${invoiceNos} | Outstanding: ${formatCurrency(totalOutstanding, currency)}${pdfUrlStr}`;
-    }).join("\n");
-
-    const ruleLabel = bracket.label;
-
-    return [
-      `\n[Dealers in ${ruleLabel}]`,
-      ` * Assigned Dealers: ${assignedDealersCount}`,
-      ` * Payment Due (${bracket.label}): ${formatCurrency(paymentDueAmount, currency)}`,
-      ` * Reminders Sent Today: ${sentTodayCount}`,
-      lines
-    ].join("\n");
-  }).filter(Boolean).join("\n");
-
-  const uniqueDealers = Array.from(new Set(dues.map(d => d.companyName || d.dealerCode).filter(Boolean)));
-  const totalOutstanding = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
-
-  const cdLogs = sentLogs.filter(log => log.cdEligible);
-  const cdDueIds = new Set<string>();
-  cdLogs.forEach(log => {
-    if (log.dueId) cdDueIds.add(log.dueId);
-    if (Array.isArray(log.invoiceIdsInvolved)) {
-      log.invoiceIdsInvolved.forEach((id: string) => id && cdDueIds.add(id));
-    }
+  // Classify each dealer strictly by their oldest invoice (max bill age)
+  const dealerGroups = Array.from(dealerMap.entries()).map(([dealerName, dealerInvoices]) => {
+    const totalAmt = dealerInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const ages = dealerInvoices.map((d) => getBillAgeDays(d.billDate || d.invoiceDate, today) || 0);
+    const oldestAge = Math.max(0, ...ages);
+    return {
+      name: dealerName,
+      invoices: dealerInvoices,
+      totalAmt,
+      oldestAge,
+      stageIndex: getStageIndex(oldestAge)
+    };
   });
-  const cdDues = dues.filter(due => cdDueIds.has(due.id));
-  const cdOutstanding = cdDues.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-  const over90Logs = sentLogs.filter(log => (log.reminderDay || 0) > 90);
-  const over90DueIds = new Set<string>();
-  over90Logs.forEach(log => {
-    if (log.dueId) over90DueIds.add(log.dueId);
-    if (Array.isArray(log.invoiceIdsInvolved)) {
-      log.invoiceIdsInvolved.forEach((id: string) => id && over90DueIds.add(id));
-    }
-  });
-  const over90Dues = dues.filter(due => over90DueIds.has(due.id));
-  const over90Outstanding = over90Dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const bucketLines = bucketDefs.map((b, idx) => {
+    const stageDealers = dealerGroups.filter((g) => g.stageIndex === idx);
+    const stageAmount = stageDealers.reduce((sum, g) => sum + g.totalAmt, 0);
+    return ` * ${b.label}: ${stageDealers.length} Dealers | Total Outstanding: ${formatCurrency(stageAmount, currency)}`;
+  }).join("\n");
 
   return [
-    `Salesperson: ${name}`,
+    `MANAGER OUTSTANDING & AGING REPORT`,
+    `Manager: ${name}`,
+    `Date: ${formatDate(today.toISOString())}`,
     "",
-    "Action required: Dealers assigned to you have invoices with due dates coming up or already pending. Please contact each dealer, remind them about the pending invoices, and ask them to arrange payment.",
+    `Dear ${name},`,
     "",
-    "Summary Table:",
-    ` * Total Assigned Dealers: Count = ${uniqueDealers.length} | Outstanding = ${formatCurrency(totalOutstanding, currency)}`,
-    ` * Due in CD: Count = ${cdLogs.length} | Outstanding = ${formatCurrency(cdOutstanding, currency)}`,
-    ` * Due Above 90 Days: Count = ${over90Logs.length} | Outstanding = ${formatCurrency(over90Outstanding, currency)}`,
+    `Please find attached your daily Manager Outstanding & Aging Portfolio Report (PDF) for all dealers assigned to you.`,
     "",
-    "Rule-by-Rule Aging Breakdown:",
-    sectionsText
+    `--- ACTION REQUIRED ---`,
+    `As an assigned manager, please review this summary and thoroughly check the attached PDF report. Kindly contact your dealers immediately—especially those in 120+ Days and 90–120 Days overdue stages—and follow up vigorously to ensure pending payments are cleared ASAP.`,
+    "",
+    "--- PORTFOLIO SUMMARY ---",
+    `Total Assigned Dealers: ${dealerMap.size}`,
+    `Total Pending Invoices: ${totalInvoices}`,
+    `Total Outstanding Balance: ${formatCurrency(totalOutstanding, currency)}`,
+    "",
+    "--- AGING STAGE BREAKDOWN ---",
+    bucketLines,
+    "",
+    "Please find all the details of each dealer in the PDF attached. This is an auto-generated email."
   ].join("\n");
 }
 
-export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sentLogs: ReminderLog[], rules?: ReminderRule[]) {
+export function buildSalespersonSummaryHtml(
+  name: string,
+  dues: DueRecord[],
+  sentLogs: ReminderLog[] = [],
+  rules?: ReminderRule[]
+) {
   const currency = dues[0]?.currency || "INR";
   const today = new Date();
   const dayStr = today.toISOString().slice(0, 10);
+  const totalOutstanding = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const totalInvoices = dues.length;
 
-  const agingBuckets = [
-    { label: "More than 180 Days", min: 181, max: Infinity },
-    { label: "Between 120 and 180 Days", min: 120, max: 180 },
-    { label: "Between 90 and 120 Days", min: 90, max: 120 },
-    { label: "90 Days", min: 89, max: 90 },
-    { label: "75 Days", min: 75, max: 89 },
-    { label: "60 Days", min: 60, max: 74 },
-    { label: "45 Days", min: 45, max: 59 },
-    { label: "30 Days", min: 30, max: 44 },
+  // Group by dealer
+  const dealerMap = new Map<string, DueRecord[]>();
+  for (const due of dues) {
+    const key = (due.companyName || due.dealerCode || "Unknown Dealer").trim();
+    if (!dealerMap.has(key)) dealerMap.set(key, []);
+    dealerMap.get(key)!.push(due);
+  }
+  const uniqueDealersCount = dealerMap.size;
+
+  // 5 Aging stage definitions (120+, 90-120, 60-90, 30-60, 0-30) based on oldest invoice
+  const bucketDefs = [
+    { label: "120+ DAYS", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+    { label: "90-120 DAYS", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+    { label: "60-90 DAYS", color: "#334155", bg: "#f8fafc", border: "#e2e8f0" },
+    { label: "30-60 DAYS", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+    { label: "0-30 DAYS", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
   ];
 
-  // Summary metrics
-  const uniqueDealers = new Set(dues.map((d) => d.companyName || d.dealerCode).filter(Boolean));
-  const totalOutstandingAmount = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const totalRemindersSent = sentLogs.length;
+  function getStageIndex(age: number) {
+    if (age > 120) return 0;
+    if (age > 90)  return 1;
+    if (age > 60)  return 2;
+    if (age > 30)  return 3;
+    return 4;
+  }
 
-  const getDealerLabel = (label: string) => {
-    if (label.toLowerCase().includes("more than 180")) {
-      return "DEALERS MORE THAN 180 DAYS";
-    }
-    if (label.toLowerCase().includes("more than 120")) {
-      return "DEALERS MORE THAN 120 DAYS";
-    }
-    if (label.toLowerCase().includes("between 120")) {
-      return "DEALERS BETWEEN 120 \u2013 180 DAYS";
-    }
-    if (label.toLowerCase().includes("between 90")) {
-      return "DEALERS BETWEEN 90 \u2013 120 DAYS";
-    }
-    return `DEALERS IN ${label.toUpperCase()}`;
-  };
+  // Classify each dealer strictly by their oldest invoice (max bill age)
+  const dealerGroups = Array.from(dealerMap.entries()).map(([dealerName, dealerInvoices]) => {
+    const totalAmt = dealerInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const ages = dealerInvoices.map((d) => getBillAgeDays(d.billDate || d.invoiceDate, today) || 0);
+    const oldestAge = Math.max(0, ...ages);
+    return {
+      name: dealerName,
+      invoices: dealerInvoices,
+      totalAmt,
+      oldestAge,
+      stageIndex: getStageIndex(oldestAge)
+    };
+  });
 
-  const bucketCardRows = agingBuckets.map((bracket) => {
-    const matchingRules = (rules || []).filter(r => r.triggerDay >= bracket.min && r.triggerDay <= bracket.max);
-    const ruleIds = matchingRules.map(r => r.id);
-    const ruleLogs = sentLogs.filter(log => ruleIds.includes(log.ruleId) || (log.reminderDay >= bracket.min && log.reminderDay <= bracket.max));
-
-    const remindersSentToday = ruleLogs.length;
-    if (remindersSentToday === 0) {
-      return "";
-    }
-
-    const matchingDueIds = new Set<string>();
-    ruleLogs.forEach((log) => {
-      if (log.dueId) matchingDueIds.add(log.dueId);
-      if (Array.isArray(log.invoiceIdsInvolved)) {
-        log.invoiceIdsInvolved.forEach((id: string) => id && matchingDueIds.add(id));
-      }
-    });
-
-    const ruleDealerCodeSet = new Set(
-      ruleLogs.map((log) => (log.dealerCode || "").trim().toLowerCase()).filter(Boolean)
-    );
-    const ruleDealerNameSet = new Set(
-      ruleLogs.map((log) => (log.dealerName || "").trim().toLowerCase()).filter(Boolean)
-    );
-
-    const ruleDues = dues.filter((due) => {
-      if (matchingDueIds.has(due.id)) {
-        return true;
-      }
-      const dCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
-      const dName = (due.companyName || "").trim().toLowerCase();
-      const matchesDealer = (dCode && ruleDealerCodeSet.has(dCode)) || (dName && ruleDealerNameSet.has(dName));
-      if (!matchesDealer) {
-        return false;
-      }
-      const age = getBillAgeDays(due.billDate || due.invoiceDate, new Date());
-      if (age === null) return false;
-      return age >= bracket.min && age <= bracket.max;
-    });
-
-    const outstanding = ruleDues.reduce((sum, d) => sum + (d.amount || 0), 0);
-
-    const ruleDealerCodes = Array.from(new Set(ruleLogs.map((log) => log.dealerCode).filter(Boolean)));
-    const dealerCount = ruleDealerCodes.length;
-
-    return `
-      <tr>
-        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;word-break:break-word;">${escapeHtml(getDealerLabel(bracket.label))}</div>
-            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(dealerCount)}</div>
-          </div>
-        </td>
-        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
-            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(formatCurrency(outstanding, currency))}</div>
-          </div>
-        </td>
-        <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-          <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-            <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
-            <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(remindersSentToday)}</div>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  const bucketStats = bucketDefs.map((b, stageIdx) => {
+    const stageDealers = dealerGroups.filter((g) => g.stageIndex === stageIdx);
+    const dealerCount = stageDealers.length;
+    const amount = stageDealers.reduce((sum, g) => sum + g.totalAmt, 0);
+    return {
+      ...b,
+      dealerCount,
+      amount
+    };
+  });
 
   return `
     <!doctype html>
@@ -760,113 +695,108 @@ export function buildSalespersonSummaryHtml(name: string, dues: DueRecord[], sen
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="x-apple-disable-message-reformatting">
-        <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
-        <title>Salesperson Summary - ${escapeHtml(name)}</title>
+        <title>Manager Outstanding & Aging Report - ${escapeHtml(name)}</title>
         <style>
           html, body {
             margin: 0 !important;
             padding: 0 !important;
             width: 100% !important;
-            min-width: 100% !important;
-            -webkit-text-size-adjust: 100%;
-            -ms-text-size-adjust: 100%;
             background-color: #f1f5f9;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #0f172a;
           }
-          * {
-            box-sizing: border-box;
-          }
-          table {
-            border-collapse: collapse !important;
-            mso-table-lspace: 0pt;
-            mso-table-rspace: 0pt;
-          }
+          * { box-sizing: border-box; }
+          table { border-collapse: collapse !important; }
           @media screen and (max-width: 640px) {
-            .email-outer-wrap {
-              padding: 10px 6px !important;
-            }
-            .email-container {
-              width: 100% !important;
-              max-width: 100% !important;
-              border-radius: 6px !important;
-            }
-            .header-box {
-              padding: 18px 16px !important;
-            }
-            .content-box {
-              padding: 16px 12px !important;
-            }
-            .header-title {
-              font-size: 20px !important;
-              line-height: 1.25 !important;
-            }
-            .metric-td {
-              display: block !important;
-              width: 100% !important;
-              max-width: 100% !important;
-              padding: 0 0 8px 0 !important;
-              box-sizing: border-box !important;
-            }
-            .metric-card-inner {
-              padding: 10px 12px !important;
-            }
-            .metric-value {
-              font-size: 18px !important;
-            }
-            .metric-label {
-              font-size: 10px !important;
-            }
+            .email-outer-wrap { padding: 12px 6px !important; }
+            .email-container { width: 100% !important; }
+            .metric-td { display: block !important; width: 100% !important; padding: 0 0 10px 0 !important; }
+            .bucket-td { display: block !important; width: 100% !important; padding: 0 0 10px 0 !important; }
           }
         </style>
       </head>
-      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;background:#f1f5f9;">
           <tr>
-            <td align="center" class="email-outer-wrap" style="padding:24px 12px;">
-              <div class="email-container" style="max-width:720px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);text-align:left;">
+            <td align="center" class="email-outer-wrap" style="padding:28px 12px;">
+              <div class="email-container" style="max-width:680px;width:100%;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.06);text-align:left;">
 
                 <!-- Header -->
-                <div class="header-box" style="padding:22px 24px;background:#0f172a;color:#ffffff;">
-                  <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;font-weight:700;">SALESPERSON SUMMARY • ${escapeHtml(dayStr)}</div>
-                  <h1 class="header-title" style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;line-height:1.2;">${escapeHtml(name)}</h1>
+                <div style="padding:24px 26px;background:#0f172a;color:#ffffff;">
+                  <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-weight:700;">MANAGER OUTSTANDING & AGING REPORT • ${escapeHtml(dayStr)}</div>
+                  <h1 style="margin:6px 0 0;font-size:22px;font-weight:800;color:#ffffff;line-height:1.2;">${escapeHtml(name)}</h1>
                 </div>
 
-                <!-- Callout Notice -->
-                <div class="content-box" style="padding:20px 22px 10px;">
-                  <div style="background:#f8fafc;border-left:4px solid #0f766e;border-top:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.5;color:#334155;">
-                    <strong style="color:#0f766e;">Action Required:</strong> Dealers assigned to you have invoices with due dates coming up or already pending. Please contact each dealer, remind them about the pending invoices, and ask them to arrange payment. A detailed PDF statement is attached.
+                <!-- Manager Greeting & Urgent Action Message -->
+                <div style="padding:24px 26px 16px;">
+                  <div style="font-size:15px;line-height:1.7;color:#1e293b;">
+                    Dear <strong>${escapeHtml(name)}</strong>,
+                    <br><br>
+                    Please find attached your daily <strong>Manager Outstanding &amp; Aging Portfolio Report (PDF)</strong> for all dealers assigned to you.
+                    <br><br>
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:6px;margin:12px 0 16px;">
+                      <div style="font-size:12px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">⚡ ACTION REQUIRED FOR MANAGER</div>
+                      <div style="font-size:14px;color:#78350f;line-height:1.5;">
+                        Please review the portfolio summary below and <strong>check the attached PDF report thoroughly</strong>. Kindly <strong>contact your assigned dealers immediately</strong>—especially those in the <strong>120+ Days</strong> and <strong>90–120 Days</strong> overdue stages—and follow up vigorously to make sure they clear their payments <strong>ASAP</strong>.
+                      </div>
+                    </div>
+                    Full dealer-wise invoice listings, bill dates, due dates, and outstanding balances are detailed in the attached PDF.
                   </div>
                 </div>
 
-                <!-- Card grid -->
-                <div class="content-box" style="padding:0 22px 22px;">
+                <!-- 3 Top Executive KPI Cards -->
+                <div style="padding:0 26px 14px;">
+                  <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Portfolio Overview</div>
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;">
-                    <!-- Row 1: Total Dealers | Total Outstanding | Reminders Sent Today -->
                     <tr>
-                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL DEALERS</div>
-                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(uniqueDealers.size)}</div>
+                      <td class="metric-td" style="width:33.33%;padding:0 5px 0 0;vertical-align:top;">
+                        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#f8fafc;box-sizing:border-box;">
+                          <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">TOTAL DEALERS</div>
+                          <div style="font-size:24px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(uniqueDealersCount)}</div>
                         </div>
                       </td>
-                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">TOTAL OUTSTANDING</div>
-                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(formatCurrency(totalOutstandingAmount, currency))}</div>
+                      <td class="metric-td" style="width:33.33%;padding:0 2.5px;vertical-align:top;">
+                        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#f8fafc;box-sizing:border-box;">
+                          <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">TOTAL INVOICES</div>
+                          <div style="font-size:24px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(totalInvoices)}</div>
                         </div>
                       </td>
-                      <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
-                        <div class="metric-card-inner" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#ffffff;box-sizing:border-box;">
-                          <div class="metric-label" style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.35;">REMINDERS SENT TODAY</div>
-                          <div class="metric-value" style="font-size:22px;font-weight:800;margin-top:6px;color:#0f172a;">${escapeHtml(totalRemindersSent)}</div>
+                      <td class="metric-td" style="width:33.33%;padding:0 0 0 5px;vertical-align:top;">
+                        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#f8fafc;box-sizing:border-box;">
+                          <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">TOTAL OUTSTANDING</div>
+                          <div style="font-size:24px;font-weight:800;margin-top:6px;color:#0f766e;">${escapeHtml(formatCurrency(totalOutstanding, currency))}</div>
                         </div>
                       </td>
                     </tr>
-                    <!-- Per-bucket rows -->
-                    ${bucketCardRows}
                   </table>
+                </div>
+
+                <!-- 5 Aging Stage Boxes -->
+                <div style="padding:0 26px 20px;">
+                  <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Aging Breakdown by Stage</div>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;">
+                    <tr>
+                      ${bucketStats.map((b, idx) => `
+                        <td class="bucket-td" style="width:20%;padding:${idx === 0 ? "0 3px 0 0" : idx === 4 ? "0 0 0 3px" : "0 2px"};vertical-align:top;">
+                          <div style="border:1px solid ${b.border};border-radius:8px;padding:10px 8px;background:${b.bg};box-sizing:border-box;">
+                            <div style="font-size:9.5px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.02em;line-height:1.3;height:22px;">${escapeHtml(b.label)}</div>
+                            <div style="font-size:16px;font-weight:800;margin-top:4px;color:${b.color};">${escapeHtml(b.dealerCount)} Dealers</div>
+                            <div style="font-size:10px;color:#475569;margin-top:4px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Total: ${escapeHtml(formatCurrency(b.amount, currency))}</div>
+                          </div>
+                        </td>
+                      `).join("")}
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- PDF Attachment Notice & Footer -->
+                <div style="padding:18px 26px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+                  <div style="font-size:13px;line-height:1.6;color:#334155;">
+                    📎 <strong>PDF Report Attached:</strong> Please find all the details of each dealer in the PDF attached. This is an auto-generated email.
+                  </div>
+                  <div style="margin-top:12px;font-size:11px;color:#94a3b8;line-height:1.4;">
+                    ARB Auto Payment Reminder System • Automated Daily Management Report
+                  </div>
                 </div>
 
               </div>
@@ -1036,7 +966,7 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
       const result = await sendReportEmail(
         settings,
         [email],
-        `Manager Summary - ${name}`,
+        `Manager Outstanding & Aging Report - ${name}`,
         buildSalespersonSummaryText(name, records, salespersonLogs, database.reminderRules),
         buildSalespersonSummaryHtml(name, records, salespersonLogs, database.reminderRules),
         attachments,

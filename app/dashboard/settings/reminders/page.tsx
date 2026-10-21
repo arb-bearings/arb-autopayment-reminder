@@ -21,6 +21,7 @@ export default async function ReminderSettingsPage({
       title="Reminder settings"
       description="Configure cash-discount rules and reminder policy controls."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

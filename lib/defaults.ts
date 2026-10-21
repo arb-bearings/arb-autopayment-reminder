@@ -42,7 +42,7 @@ function buildBody30() {
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 35-day: final reminder for 3% CD */
@@ -56,7 +56,7 @@ Dear {{contactName}},
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 45-day: first reminder for 2% CD */
@@ -68,7 +68,7 @@ function buildBody45() {
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 50-day: final reminder for 2% CD */
@@ -82,7 +82,7 @@ Dear {{contactName}},
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 60-day: due in 5 days */
@@ -91,12 +91,12 @@ function buildBody60() {
 
 Please note that a payment of {{amount}} will become due within the next 5 days, and the total outstanding amount is {{totalDueAmount}}.
 
-We kindly request you to arrange payment of the due amount of {{amount}} by/before the due date, as per ARB’s payment terms.
+We kindly request you to arrange payment of the due amount of {{amount}} by/before the due date, as per our payment terms.
 
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 75-day / 60+ day: overdue, pay at earliest */
@@ -110,7 +110,7 @@ We kindly request you to arrange payment of the total overdue amount of {{amount
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 80-day */
@@ -126,7 +126,7 @@ So kindly arrange to remit us the payment at urgent basis.
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 85-day */
@@ -142,7 +142,7 @@ So kindly arrange to remit us the payment at most urgent basis.
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 90-day / 90+ day: significantly overdue, future invoicing at risk */
@@ -158,7 +158,7 @@ We kindly request you to arrange payment of the total overdue amount of {{amount
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 function buildBody95() {
@@ -173,7 +173,7 @@ So please arrange to remit the outstanding payment immediately to ensure the con
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 function buildBody100() {
@@ -186,7 +186,7 @@ Your invoicing has been put on temporary hold due to the outstanding payment. Ki
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 /** 120-day / 120+ day: invoicing on hold, clear immediately */
@@ -200,57 +200,57 @@ Your invoicing has been put on temporary hold due to the outstanding payment. Ki
 Thank you for your attention in the matter.
 
 Regards,
-ARB Bearings Limited`;
+{{senderCompany}}`;
 }
 
 // ─── WhatsApp / SMS Body Builders ─────────────────────────────────────────────
 
 function buildWhatsapp30() {
-  return `Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
+  return `Dear {{contactName}}, {{cdShortMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp35() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp45() {
-  return `Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
+  return `Dear {{contactName}}, {{cdShortMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp50() {
-  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — ARB Bearings Limited`;
+  return `INVOICE {{invoiceNumber}} | Dear {{contactName}}, {{cdShortMessage}} — {{senderCompany}}`;
 }
 
 function buildWhatsapp60() {
-  return `Dear {{contactName}}, payment of {{amount}} will become due within 5 days, and total outstanding amount is {{totalDueAmount}}. Please pay before due date. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} will become due within 5 days, and total outstanding amount is {{totalDueAmount}}. Please pay before due date. — {{senderCompany}}`;
 }
 
 function buildWhatsapp75() {
-  return `Dear {{contactName}}, payment of {{amount}} against invoice is now overdue (has exceeded 60 days), and total outstanding amount is {{totalDueAmount}}. Please arrange payment at the earliest. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} against invoice is now overdue (has exceeded 60 days), and total outstanding amount is {{totalDueAmount}}. Please arrange payment at the earliest. — {{senderCompany}}`;
 }
 
 function buildWhatsapp80() {
-  return `Dear {{contactName}}, payment more than 80 days of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 80 days of Rs. {{amount}} is overdue. Please arrange payment on urgent basis. — {{senderCompany}}`;
 }
 
 function buildWhatsapp85() {
-  return `Dear {{contactName}}, payment more than 85 days of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 85 days of Rs. {{amount}} is overdue. Arrange payment on MOST urgent basis. — {{senderCompany}}`;
 }
 
 function buildWhatsapp90() {
-  return `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain on hold until cleared. Please arrange payment at earliest. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} is significantly overdue and has exceeded 90 days. Invoicing will remain on hold until cleared. Please arrange payment at earliest. — {{senderCompany}}`;
 }
 
 function buildWhatsapp95() {
-  return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be on hold. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 95 days of Rs. {{amount}} is 90 days overdue. Invoicing will be on hold. — {{senderCompany}}`;
 }
 
 function buildWhatsapp100() {
-  return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing is on hold. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment more than 100 days of Rs. {{amount}} is 95 days overdue. Invoicing is on hold. — {{senderCompany}}`;
 }
 
 function buildWhatsapp120() {
-  return `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing is on hold. Kindly clear immediately. — ARB Bearings Limited`;
+  return `Dear {{contactName}}, payment of {{amount}} is overdue (>120 days). Invoicing is on hold. Kindly clear immediately. — {{senderCompany}}`;
 }
 
 // ─── Subject Lines ────────────────────────────────────────────────────────────

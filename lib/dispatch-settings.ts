@@ -20,16 +20,32 @@ export function resolveDispatchSettings(
       isE164PhoneNumber(legacySmsSenderId) ? legacySmsSenderId : ""
     ].find((value) => value !== "") || "";
 
+  const isLubricants =
+    Boolean(settings?.ownerId?.toLowerCase().includes("lubricant")) ||
+    Boolean(settings?.senderEmail?.toLowerCase().includes("lubricant")) ||
+    Boolean(settings?.smtpUser?.toLowerCase().includes("lubricant"));
+
+  const defaultSmtpHost = (isLubricants && process.env.SMTP_LUBRICANTS_HOST) || process.env.SMTP_HOST || "smtp.gmail.com";
+  const defaultSmtpPort = (isLubricants && process.env.SMTP_LUBRICANTS_PORT)
+    ? Number(process.env.SMTP_LUBRICANTS_PORT)
+    : Number(process.env.SMTP_PORT || 465);
+  const defaultSmtpSecure = (isLubricants && process.env.SMTP_LUBRICANTS_SECURE !== undefined)
+    ? process.env.SMTP_LUBRICANTS_SECURE.toLowerCase() === "true"
+    : process.env.SMTP_SECURE?.toLowerCase() === "true";
+  const defaultSmtpUser = (isLubricants && process.env.SMTP_LUBRICANTS_USER) || process.env.SMTP_USER || "";
+  const defaultSmtpPass = (isLubricants && process.env.SMTP_LUBRICANTS_PASS) || process.env.SMTP_PASS || "";
+  const defaultSmtpFrom = (isLubricants && process.env.SMTP_LUBRICANTS_FROM) || process.env.SMTP_FROM || "";
+
   return {
     ownerId: settings?.ownerId || "",
-    smtpHost: settings?.smtpHost || process.env.SMTP_HOST || "",
-    smtpPort: settings?.smtpPort || Number(process.env.SMTP_PORT || 587),
-    smtpSecure: settings?.smtpSecure ?? process.env.SMTP_SECURE?.toLowerCase() === "true",
-    smtpUser: settings?.smtpUser || process.env.SMTP_USER || "",
-    smtpPass: settings?.smtpPass || process.env.SMTP_PASS || "",
-    senderEmail: savedSenderEmail || process.env.SMTP_FROM || "",
+    smtpHost: settings?.smtpHost || defaultSmtpHost,
+    smtpPort: settings?.smtpPort || defaultSmtpPort,
+    smtpSecure: settings?.smtpSecure ?? defaultSmtpSecure,
+    smtpUser: settings?.smtpUser || defaultSmtpUser,
+    smtpPass: settings?.smtpPass || defaultSmtpPass,
+    senderEmail: savedSenderEmail || defaultSmtpFrom,
     senderMobileNumber: settings?.senderMobileNumber || "",
-    smtpFrom: savedSenderEmail || process.env.SMTP_FROM || "",
+    smtpFrom: savedSenderEmail || defaultSmtpFrom,
     smsProviderName: settings?.smsProviderName || "Twilio",
     smsApiKey: settings?.smsApiKey || process.env.TWILIO_ACCOUNT_SID || "",
     smsApiSecret: settings?.smsApiSecret || process.env.TWILIO_AUTH_TOKEN || "",

@@ -30,6 +30,7 @@ export default async function MasterDatabasePage({
       title="Master contact database"
       description="Keep one shared company contact sheet ready for due matching and reminder dispatch."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin={isAdmin}
       userRole={user.role}

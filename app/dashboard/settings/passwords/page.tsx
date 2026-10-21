@@ -25,6 +25,7 @@ export default async function PasswordManagementPage({
       title="Password management"
       description="Configure operation passwords for protected uploads, dispatch, reporting, and admin settings."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}

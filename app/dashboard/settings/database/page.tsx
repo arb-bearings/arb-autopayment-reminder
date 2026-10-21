@@ -16,6 +16,7 @@ export default async function DatabaseSettingsPage() {
       title="Database settings"
       description="Control shared master and due database upload workspaces."
       companyName={user.companyName}
+      companyCode={user.companyCode || "ARB"}
       userName={user.name}
       isAdmin
       userRole={user.role}
