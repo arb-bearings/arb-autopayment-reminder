@@ -2,7 +2,7 @@
 
 import { useId, useState, useMemo } from "react";
 import type { DueRecord, MasterContact } from "@/lib/types";
-import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays, extractDealerCodeAndName } from "@/lib/utils";
+import { formatCurrency, formatDate, formatElapsedDaysTag, getOverdueDays, extractDealerCodeAndName, getBillAgeDays } from "@/lib/utils";
 import { findMatchingMasterContact } from "@/lib/contact-matching";
 
 interface GroupedDuesTableProps {
