@@ -247,13 +247,51 @@ export function buildDailyActivityReportHtml(input: {
     </tr>
   `).join("");
 
+  const todayForAging = new Date();
   const salespersonRows = Array.from(salespersonGroups.entries()).map(([salesperson, records]) => {
-    const amount = records.reduce((sum, entry) => sum + entry.amount, 0);
+    const uniqueDealers = new Set(
+      records.map((r) => (r.companyName || r.dealerCode || "Unknown").trim().toLowerCase()).filter(Boolean)
+    );
+    const dealerCount = uniqueDealers.size;
+
+    const over120Amt = records.filter(r => {
+      const age = getBillAgeDays(r.billDate || r.invoiceDate, todayForAging) || 0;
+      return age > 120;
+    }).reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const age90to120Amt = records.filter(r => {
+      const age = getBillAgeDays(r.billDate || r.invoiceDate, todayForAging) || 0;
+      return age >= 91 && age <= 120;
+    }).reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const age60to90Amt = records.filter(r => {
+      const age = getBillAgeDays(r.billDate || r.invoiceDate, todayForAging) || 0;
+      return age >= 61 && age <= 90;
+    }).reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const age30to60Amt = records.filter(r => {
+      const age = getBillAgeDays(r.billDate || r.invoiceDate, todayForAging) || 0;
+      return age >= 31 && age <= 60;
+    }).reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const age0to30Amt = records.filter(r => {
+      const age = getBillAgeDays(r.billDate || r.invoiceDate, todayForAging) || 0;
+      return age >= 0 && age <= 30;
+    }).reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const totalAmt = records.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const rowCurrency = records[0]?.currency || currency;
+
     return `
       <tr>
         <td class="table-cell wrap-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a;font-size:13px;word-break:break-word;">${escapeHtml(salesperson)}</td>
-        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;">${escapeHtml(records.length)}</td>
-        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0f172a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(amount, records[0]?.currency || currency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:13px;text-align:center;font-weight:700;">${escapeHtml(dealerCount)}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:${over120Amt > 0 ? "#b91c1c" : "#64748b"};font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(over120Amt, rowCurrency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:${age90to120Amt > 0 ? "#b45309" : "#64748b"};font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(age90to120Amt, rowCurrency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#334155;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(age60to90Amt, rowCurrency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#2563eb;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(age30to60Amt, rowCurrency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#16a34a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(age0to30Amt, rowCurrency))}</td>
+        <td class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:800;color:#0f172a;font-size:13px;white-space:nowrap;">${escapeHtml(formatCurrency(totalAmt, rowCurrency))}</td>
       </tr>
     `;
   }).join("");
@@ -263,9 +301,14 @@ export function buildDailyActivityReportHtml(input: {
       <table class="data-table" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;min-width:${minWidth};">
         <thead>
           <tr style="background:#f8fafc;">
-            ${headers.map((header, index) => `
-              <th align="${index === headers.length - 1 ? "right" : "left"}" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;">${escapeHtml(header)}</th>
-            `).join("")}
+            ${headers.map((header, index) => {
+              const align = (header === "Salesperson" || header === "Dealer" || header === "Oldest Due") 
+                ? "left" 
+                : (header === "Dealers" || header === "Rank" || header === "Invoices" || header === "Max Overdue") 
+                  ? "center" 
+                  : "right";
+              return `<th align="${align}" class="table-cell" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:800;white-space:nowrap;text-align:${align};">${escapeHtml(header)}</th>`;
+            }).join("")}
           </tr>
         </thead>
         <tbody>
@@ -408,17 +451,17 @@ export function buildDailyActivityReportHtml(input: {
                     ${bucketCardRows}
                   </table>
 
-                  <!-- Top Dealers by Outstanding -->
-                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Outstanding (Amount)</h2>
+                  <!-- Salesperson-wise Summary (MOVED TO TOP!) -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Salesperson-wise Summary</h2>
+                  ${table(["Salesperson", "Dealers", "> 120 Days", "90–120 Days", "60–90 Days", "30–60 Days", "0–30 Days", "Total Outstanding"], salespersonRows, "No records found.", "750px")}
+
+                  <!-- Top Dealers by Outstanding (Top 20) -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Outstanding (Top 20)</h2>
                   ${table(["Rank", "Dealer", "Invoices", "Outstanding"], topOutstandingRows, "No records found.", "340px")}
 
-                  <!-- Top Dealers by Overdue Days -->
-                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Overdue Days</h2>
+                  <!-- Top Dealers by Overdue Days (Top 20) -->
+                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Top Dealers by Overdue Days (Top 20)</h2>
                   ${table(["Rank", "Dealer", "Invoices", "Max Overdue", "Oldest Due", "Outstanding"], topOverdueRows, "No overdue dealers.", "480px")}
-
-                  <!-- Salesperson-wise Summary -->
-                  <h2 class="section-title" style="font-size:17px;margin:24px 0 10px;color:#0f172a;font-weight:800;">Salesperson-wise Summary</h2>
-                  ${table(["Salesperson", "Invoices", "Outstanding"], salespersonRows, "No records found.", "320px")}
                 </div>
 
               </div>
@@ -464,7 +507,7 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
       amount: records.reduce((sum, entry) => sum + entry.amount, 0)
     }))
     .sort((left, right) => right.amount - left.amount)
-    .slice(0, 10);
+    .slice(0, 20);
   const topOverdue = Array.from(dealerGroups.entries())
     .map(([dealer, records]) => {
       const overdueDays = records.map((entry) => getOverdueDays(entry, reportDate));
@@ -482,7 +525,7 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
     })
     .filter((entry) => entry.maxOverdueDays > 0)
     .sort((left, right) => right.maxOverdueDays - left.maxOverdueDays || right.amount - left.amount)
-    .slice(0, 10);
+    .slice(0, 20);
   const overdueDues = dues.filter((entry) => getOverdueDays(entry, reportDate) > 0);
   const sentLogs = todayLogs.filter((entry) => entry.status === "sent");
 
@@ -502,12 +545,25 @@ export async function buildDailyActivityReport(user: ReportUser, reportDate = ne
     `Overdue Outstanding Amount: ${formatCurrency(overdueDues.reduce((sum, entry) => sum + entry.amount, 0), dues[0]?.currency || "INR")}`,
     "",
     "Salesperson-wise Summary:",
-    ...Array.from(salespersonGroups.entries()).map(([salesperson, records]) => `${salesperson}: ${records.length} invoices, ${formatCurrency(records.reduce((sum, entry) => sum + entry.amount, 0), records[0]?.currency || "INR")}`),
+    ...Array.from(salespersonGroups.entries()).map(([salesperson, records]) => {
+      const uniqueDealers = new Set(
+        records.map((r) => (r.companyName || r.dealerCode || "Unknown").trim().toLowerCase()).filter(Boolean)
+      );
+      const rowCurrency = records[0]?.currency || dues[0]?.currency || "INR";
+      const over120Amt = records.filter(r => (getBillAgeDays(r.billDate || r.invoiceDate, reportDate) || 0) > 120).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const age90to120Amt = records.filter(r => { const a = getBillAgeDays(r.billDate || r.invoiceDate, reportDate) || 0; return a >= 91 && a <= 120; }).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const age60to90Amt = records.filter(r => { const a = getBillAgeDays(r.billDate || r.invoiceDate, reportDate) || 0; return a >= 61 && a <= 90; }).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const age30to60Amt = records.filter(r => { const a = getBillAgeDays(r.billDate || r.invoiceDate, reportDate) || 0; return a >= 31 && a <= 60; }).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const age0to30Amt = records.filter(r => { const a = getBillAgeDays(r.billDate || r.invoiceDate, reportDate) || 0; return a >= 0 && a <= 30; }).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const totalAmt = records.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+      return `${salesperson}: ${uniqueDealers.size} dealers | >120d: ${formatCurrency(over120Amt, rowCurrency)}, 90-120d: ${formatCurrency(age90to120Amt, rowCurrency)}, 60-90d: ${formatCurrency(age60to90Amt, rowCurrency)}, 30-60d: ${formatCurrency(age30to60Amt, rowCurrency)}, 0-30d: ${formatCurrency(age0to30Amt, rowCurrency)} | Total: ${formatCurrency(totalAmt, rowCurrency)}`;
+    }),
     "",
-    "Top Outstanding Dealers:",
+    "Top Outstanding Dealers (Top 20):",
     ...topOutstanding.map((entry) => `${entry.dealer}: ${entry.invoiceCount} invoices, ${formatCurrency(entry.amount, dues[0]?.currency || "INR")}`),
     "",
-    "Top Dealers by Overdue Days:",
+    "Top Dealers by Overdue Days (Top 20):",
     ...(topOverdue.length === 0
       ? ["None"]
       : topOverdue.map((entry) => `${entry.dealer}: ${entry.maxOverdueDays} days overdue, ${entry.invoiceCount} invoices, oldest due ${entry.oldestDueDate ? formatDate(entry.oldestDueDate) : "Not available"}, ${formatCurrency(entry.amount, dues[0]?.currency || "INR")}`)),
@@ -595,10 +651,16 @@ export function buildSalespersonSummaryText(
     };
   });
 
-  const bucketLines = bucketDefs.map((b, idx) => {
-    const stageDealers = dealerGroups.filter((g) => g.stageIndex === idx);
-    const stageAmount = stageDealers.reduce((sum, g) => sum + g.totalAmt, 0);
-    return ` * ${b.label}: ${stageDealers.length} Dealers | Total Outstanding: ${formatCurrency(stageAmount, currency)}`;
+  const bucketLines = bucketDefs.map((b) => {
+    const matchingInvoices = dues.filter((d) => {
+      const age = getBillAgeDays(d.billDate || d.invoiceDate, today) || 0;
+      return age >= b.min && age <= b.max;
+    });
+    const amount = matchingInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const dealerKeys = new Set(
+      matchingInvoices.map((d) => (d.companyName || d.dealerCode || "Unknown Dealer").trim())
+    );
+    return ` * ${b.label}: ${dealerKeys.size} Dealers | Total Outstanding: ${formatCurrency(amount, currency)}`;
   }).join("\n");
 
   return [
@@ -646,41 +708,26 @@ export function buildSalespersonSummaryHtml(
   }
   const uniqueDealersCount = dealerMap.size;
 
-  // 5 Aging stage definitions (120+, 90-120, 60-90, 30-60, 0-30) based on oldest invoice
+  // 5 Aging stage definitions (120+, 90-120, 60-90, 30-60, 0-30)
   const bucketDefs = [
-    { label: "120+ DAYS", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
-    { label: "90-120 DAYS", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-    { label: "60-90 DAYS", color: "#334155", bg: "#f8fafc", border: "#e2e8f0" },
-    { label: "30-60 DAYS", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
-    { label: "0-30 DAYS", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
+    { label: "120+ DAYS", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca", min: 121, max: Infinity },
+    { label: "90-120 DAYS", color: "#b45309", bg: "#fffbeb", border: "#fde68a", min: 91, max: 120 },
+    { label: "60-90 DAYS", color: "#334155", bg: "#f8fafc", border: "#e2e8f0", min: 61, max: 90 },
+    { label: "30-60 DAYS", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", min: 31, max: 60 },
+    { label: "0-30 DAYS", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0", min: 0, max: 30 },
   ];
 
-  function getStageIndex(age: number) {
-    if (age > 120) return 0;
-    if (age > 90)  return 1;
-    if (age > 60)  return 2;
-    if (age > 30)  return 3;
-    return 4;
-  }
-
-  // Classify each dealer strictly by their oldest invoice (max bill age)
-  const dealerGroups = Array.from(dealerMap.entries()).map(([dealerName, dealerInvoices]) => {
-    const totalAmt = dealerInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
-    const ages = dealerInvoices.map((d) => getBillAgeDays(d.billDate || d.invoiceDate, today) || 0);
-    const oldestAge = Math.max(0, ...ages);
-    return {
-      name: dealerName,
-      invoices: dealerInvoices,
-      totalAmt,
-      oldestAge,
-      stageIndex: getStageIndex(oldestAge)
-    };
-  });
-
-  const bucketStats = bucketDefs.map((b, stageIdx) => {
-    const stageDealers = dealerGroups.filter((g) => g.stageIndex === stageIdx);
-    const dealerCount = stageDealers.length;
-    const amount = stageDealers.reduce((sum, g) => sum + g.totalAmt, 0);
+  // Each summary box calculates ONLY invoice amounts within that age bracket
+  const bucketStats = bucketDefs.map((b) => {
+    const matchingInvoices = dues.filter((d) => {
+      const age = getBillAgeDays(d.billDate || d.invoiceDate, today) || 0;
+      return age >= b.min && age <= b.max;
+    });
+    const amount = matchingInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const dealerKeys = new Set(
+      matchingInvoices.map((d) => (d.companyName || d.dealerCode || "Unknown Dealer").trim())
+    );
+    const dealerCount = dealerKeys.size;
     return {
       ...b,
       dealerCount,
@@ -779,9 +826,9 @@ export function buildSalespersonSummaryHtml(
                       ${bucketStats.map((b, idx) => `
                         <td class="bucket-td" style="width:20%;padding:${idx === 0 ? "0 3px 0 0" : idx === 4 ? "0 0 0 3px" : "0 2px"};vertical-align:top;">
                           <div style="border:1px solid ${b.border};border-radius:8px;padding:10px 8px;background:${b.bg};box-sizing:border-box;">
-                            <div style="font-size:9.5px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.02em;line-height:1.3;height:22px;">${escapeHtml(b.label)}</div>
-                            <div style="font-size:16px;font-weight:800;margin-top:4px;color:${b.color};">${escapeHtml(b.dealerCount)} Dealers</div>
-                            <div style="font-size:10px;color:#475569;margin-top:4px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Total: ${escapeHtml(formatCurrency(b.amount, currency))}</div>
+                            <div style="font-size:9.5px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.02em;line-height:1.3;height:20px;">${escapeHtml(b.label)}</div>
+                            <div style="font-size:13px;font-weight:800;margin-top:5px;color:${b.color};">${escapeHtml(b.dealerCount)} Dealers</div>
+                            <div style="font-size:13px;font-weight:800;margin-top:4px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(formatCurrency(b.amount, currency))}</div>
                           </div>
                         </td>
                       `).join("")}

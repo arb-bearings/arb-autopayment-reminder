@@ -506,11 +506,11 @@ export function generateSalespersonSummaryPDF(
 
       // 3. Dealer Aging Bucket Definitions (5 stages based on oldest invoice)
       const bucketDefs = [
-        { label: "120+ DAYS",   title: "DEALERS IN 120+ DAYS OVERDUE", min: 121, max: Infinity, color: warningRed,   bg: "#fef2f2", bannerBg: "#991b1b" },
-        { label: "90-120 DAYS", title: "DEALERS IN 90–120 DAYS OVERDUE", min: 91,  max: 120,      color: warningAmber, bg: "#fffbeb", bannerBg: "#b45309" },
-        { label: "60-90 DAYS",  title: "DEALERS IN 60–90 DAYS DUE",   min: 61,  max: 90,       color: "#334155",    bg: "#f8fafc", bannerBg: "#334155" },
-        { label: "30-60 DAYS",  title: "DEALERS IN 30–60 DAYS DUE",   min: 31,  max: 60,       color: "#2563eb",    bg: "#eff6ff", bannerBg: "#1d4ed8" },
-        { label: "0-30 DAYS",   title: "DEALERS IN 0–30 DAYS DUE",    min: 0,   max: 30,       color: cdGreen,      bg: "#f0fdf4", bannerBg: "#15803d" },
+        { label: "120+ DAYS",   title: "MORE THAN 120 DAYS OVERDUE", min: 121, max: Infinity, color: warningRed,   bg: "#fef2f2", bannerBg: "#991b1b" },
+        { label: "90-120 DAYS", title: "90 TO 120 DAYS OVERDUE",     min: 91,  max: 120,      color: warningAmber, bg: "#fffbeb", bannerBg: "#b45309" },
+        { label: "60-90 DAYS",  title: "60 TO 90 DAYS DUE",          min: 61,  max: 90,       color: "#334155",    bg: "#f8fafc", bannerBg: "#334155" },
+        { label: "30-60 DAYS",  title: "30 TO 60 DAYS DUE",          min: 31,  max: 60,       color: "#2563eb",    bg: "#eff6ff", bannerBg: "#1d4ed8" },
+        { label: "0-30 DAYS",   title: "0 TO 30 DAYS DUE",           min: 0,   max: 30,       color: cdGreen,      bg: "#f0fdf4", bannerBg: "#15803d" },
       ];
 
       function getStageIndex(age: number) {
@@ -553,11 +553,19 @@ export function generateSalespersonSummaryPDF(
         });
       }
 
-      // Calculate stats for 5 mini cards: each dealer counts strictly in ONE card
+      // Calculate stats for 5 mini cards: each summary box calculates ONLY invoice amounts within that age bracket
       const bucketStats = bucketDefs.map((b, stageIdx) => {
+        const matchingInvoices = dues.filter((d) => {
+          const age = getBillAgeDays(d.billDate || d.invoiceDate, today) || 0;
+          return age >= b.min && age <= b.max;
+        });
+        const amount = matchingInvoices.reduce((sum, d) => sum + (d.amount || 0), 0);
+        const dealerKeys = new Set(
+          matchingInvoices.map((d) => (d.companyName || d.dealerCode || "Unknown Dealer").trim())
+        );
+        const dealerCount = dealerKeys.size;
         const stageDealers = dealerGroups.filter((g) => g.stageIndex === stageIdx);
-        const dealerCount = stageDealers.length;
-        const amount = stageDealers.reduce((sum, g) => sum + g.totalOutstanding, 0);
+
         return {
           ...b,
           dealerCount,
@@ -568,47 +576,53 @@ export function generateSalespersonSummaryPDF(
 
       const agingY = startY + boxHeight + 8;
       const miniWidth = 97;
-      const miniHeight = 46;
+      const miniHeight = 50;
       const cardGap = 7.5;
 
       bucketStats.forEach((box, idx) => {
         const cardX = 40 + idx * (miniWidth + cardGap);
 
         doc.rect(cardX, agingY, miniWidth, miniHeight)
-           .fillColor("#fafafa")
+           .fillColor("#f8fafc")
            .fill()
            .strokeColor(borderColor)
            .lineWidth(0.5)
            .stroke();
 
-        doc.fillColor(secondaryColor).font("Helvetica-Bold").fontSize(6.5)
+        // Bracket label
+        doc.fillColor(secondaryColor).font("Helvetica-Bold").fontSize(7)
            .text(box.label, cardX + 4, agingY + 7, { width: miniWidth - 8, align: "center" });
-        doc.fillColor(box.color).font("Helvetica-Bold").fontSize(11.5)
-           .text(`${box.dealerCount} Dealers`, cardX + 4, agingY + 18, { width: miniWidth - 8, align: "center" });
-        doc.fillColor(secondaryColor).font("Helvetica").fontSize(5.8)
-           .text(`Total: ${formatCurrencyForPdf(box.amount, currency)}`, cardX + 4, agingY + 33, { width: miniWidth - 8, align: "center" });
+
+        // Dealers count and Total Outstanding amount are EQUAL in size (8.5pt bold)
+        doc.fillColor(box.color).font("Helvetica-Bold").fontSize(8.5)
+           .text(`${box.dealerCount} Dealers`, cardX + 4, agingY + 20, { width: miniWidth - 8, align: "center" });
+        doc.fillColor(textColor).font("Helvetica-Bold").fontSize(8.5)
+           .text(formatCurrencyForPdf(box.amount, currency), cardX + 4, agingY + 34, { width: miniWidth - 8, align: "center" });
       });
 
       let currentY = agingY + miniHeight + 14;
 
-      // Columns: # | Invoice No. | Bill Date | Due Date | Bill Age | Outstanding
+      // Columns: # | Invoice No. | Bill Date | Due Date | Bill Age | Outstanding (Minimal light gray theme, normal text)
       function renderTableHeader(yPos: number) {
-        doc.rect(40, yPos, 515, 18)
-           .fillColor("#0f172a")
-           .fill();
+        doc.rect(40, yPos, 515, 17)
+           .fillColor("#f8fafc")
+           .fill()
+           .strokeColor("#e2e8f0")
+           .lineWidth(0.5)
+           .stroke();
 
-        doc.fillColor("#ffffff")
-           .font("Helvetica-Bold")
+        doc.fillColor("#64748b")
+           .font("Helvetica")
            .fontSize(7.5);
 
-        doc.text("#",            46,  yPos + 5, { width: 18 });
-        doc.text("Invoice No.",  68,  yPos + 5, { width: 105 });
-        doc.text("Bill Date",    178, yPos + 5, { width: 80 });
-        doc.text("Due Date",     262, yPos + 5, { width: 80 });
-        doc.text("Bill Age",     346, yPos + 5, { width: 72, align: "center" });
-        doc.text("Outstanding",  422, yPos + 5, { width: 125, align: "right" });
+        doc.text("#",            46,  yPos + 4.5, { width: 18 });
+        doc.text("Invoice No.",  68,  yPos + 4.5, { width: 105 });
+        doc.text("Bill Date",    178, yPos + 4.5, { width: 80 });
+        doc.text("Due Date",     262, yPos + 4.5, { width: 80 });
+        doc.text("Bill Age",     346, yPos + 4.5, { width: 72, align: "center" });
+        doc.text("Outstanding",  422, yPos + 4.5, { width: 125, align: "right" });
 
-        return yPos + 18;
+        return yPos + 17;
       }
 
       // 4. Render Dealers Grouped by Stage Headings
@@ -624,16 +638,16 @@ export function generateSalespersonSummaryPDF(
           currentY = 40;
         }
 
-        // Stage Section Banner
+        // Stage Section Banner (PRIOR AGE BRACKET HEADING)
         doc.rect(40, currentY, 515, 20)
            .fillColor(stageBucket.bannerBg)
            .fill();
 
         doc.fillColor("#ffffff")
            .font("Helvetica-Bold")
-           .fontSize(8.5)
+           .fontSize(9)
            .text(
-             `STAGE ${stageIdx + 1}: ${stageBucket.title}   (${stageBucket.dealerCount} Dealers   |   Total: ${formatCurrencyForPdf(stageBucket.amount, currency)})`,
+             `STAGE ${stageIdx + 1}: ${stageBucket.title}   (${stageBucket.dealers.length} Dealers   |   Total: ${formatCurrencyForPdf(stageBucket.amount, currency)})`,
              48,
              currentY + 5.5,
              { width: 500 }
@@ -653,30 +667,41 @@ export function generateSalespersonSummaryPDF(
             currentY = 40;
           }
 
-          // Dealer Banner
+          // Dealer Banner - Light Gray Theme with Highlighted Dealer Name (PRIOR)
           doc.rect(40, currentY, 515, 18)
-             .fillColor("#0f766e")
+             .fillColor("#f1f5f9")
+             .fill()
+             .strokeColor("#cbd5e1")
+             .lineWidth(0.5)
+             .stroke();
+
+          // Left accent stripe matching stage color
+          doc.rect(40, currentY, 3, 18)
+             .fillColor(stageBucket.bannerBg)
              .fill();
 
-          doc.fillColor("#ffffff")
+          // HIGHLIGHT DEALER NAME (PRIOR)
+          doc.fillColor("#0f172a")
              .font("Helvetica-Bold")
-             .fontSize(8)
+             .fontSize(8.5)
              .text(
                `Dealer ${globalDealerIndex}: ${dealer.headerLabel}  [Oldest Invoice: ${dealer.oldestAge} Days]`,
                48,
                currentY + 5,
-               { width: 330, height: 11, ellipsis: true }
+               { width: 310, height: 11, ellipsis: true }
              );
 
-          doc.fillColor("#ffffff")
-             .font("Helvetica-Bold")
+          // Normal secondary text for invoices & total
+          doc.font("Helvetica")
+             .fontSize(7.5)
+             .fillColor("#64748b")
+             .text(`${dealer.invoices.length} Invoices  |  Total: `, 360, currentY + 5, { width: 100, align: "right" });
+
+          // Dealer Total Outstanding (SECONDARY PRIOR)
+          doc.font("Helvetica-Bold")
              .fontSize(8)
-             .text(
-               `${dealer.invoices.length} Invoices  |  Total: ${formatCurrencyForPdf(dealer.totalOutstanding, currency)}`,
-               380,
-               currentY + 5,
-               { width: 170, align: "right" }
-             );
+             .fillColor("#0f172a")
+             .text(formatCurrencyForPdf(dealer.totalOutstanding, currency), 460, currentY + 5, { width: 90, align: "right" });
 
           currentY += 18;
           currentY = renderTableHeader(currentY);
@@ -697,8 +722,11 @@ export function generateSalespersonSummaryPDF(
               // Redraw Dealer header reminder on new page
               doc.rect(40, currentY, 515, 16)
                  .fillColor("#f1f5f9")
-                 .fill();
-              doc.fillColor(primaryColor)
+                 .fill()
+                 .strokeColor("#e2e8f0")
+                 .lineWidth(0.5)
+                 .stroke();
+              doc.fillColor("#0f172a")
                  .font("Helvetica-Bold")
                  .fontSize(7.5)
                  .text(`(Continued) Dealer: ${dealer.headerLabel}`, 48, currentY + 4, { width: 500 });
@@ -708,7 +736,7 @@ export function generateSalespersonSummaryPDF(
 
             const ageText = billAge !== null ? `${billAge} Days` : "-";
             const isZebra = invIdx % 2 === 1;
-            const rowBg = isZebra ? "#f8fafc" : "#ffffff";
+            const rowBg = isZebra ? "#fcfcfc" : "#ffffff";
 
             doc.rect(40, currentY, 515, 17)
                .fillColor(rowBg)
@@ -718,31 +746,48 @@ export function generateSalespersonSummaryPDF(
             const bDate = due.billDate || due.invoiceDate ? formatDate(due.billDate || due.invoiceDate) : "-";
             const dDate = due.dueDate ? formatDate(due.dueDate) : "-";
 
-            doc.fillColor(textColor)
+            // # (normal light gray text)
+            doc.fillColor("#94a3b8")
                .font("Helvetica")
                .fontSize(7.5)
                .text((invIdx + 1).toString(), 46, currentY + 4, { width: 18 });
 
-            doc.font("Helvetica-Bold")
+            // Invoice No (normal simple text, NOT bold)
+            doc.fillColor("#475569")
+               .font("Helvetica")
+               .fontSize(7.5)
                .text(invNo, 68, currentY + 4, { width: 105, height: 10, ellipsis: true });
 
-            doc.font("Helvetica")
+            // Bill Date & Due Date (normal simple text, NOT bold)
+            doc.fillColor("#64748b")
+               .font("Helvetica")
+               .fontSize(7.5)
                .text(bDate, 178, currentY + 4, { width: 80 })
                .text(dDate, 262, currentY + 4, { width: 80 });
 
-            // Highlight bill age
-            doc.font("Helvetica-Bold")
-               .fillColor(billAge !== null && billAge > 90 ? warningRed : (billAge !== null && billAge > 60 ? warningAmber : textColor))
-               .text(ageText, 346, currentY + 4, { width: 72, align: "center" });
+            // HIGHLIGHT BILL AGE (PRIOR!)
+            const ageColor = billAge !== null && billAge > 120 
+              ? warningRed 
+              : (billAge !== null && billAge > 90 
+                ? warningAmber 
+                : (billAge !== null && billAge > 60 
+                  ? "#d97706" 
+                  : textColor));
 
-            // Outstanding Amount
             doc.font("Helvetica-Bold")
-               .fillColor(textColor)
+               .fontSize(8.5)
+               .fillColor(ageColor)
+               .text(ageText, 346, currentY + 3.5, { width: 72, align: "center" });
+
+            // Outstanding Amount (SECONDARY PRIOR)
+            doc.font("Helvetica-Bold")
+               .fontSize(7.5)
+               .fillColor("#0f172a")
                .text(formatCurrencyForPdf(due.amount, currency), 422, currentY + 4, { width: 125, align: "right" });
 
             currentY += 17;
 
-            doc.strokeColor("#e2e8f0")
+            doc.strokeColor("#f1f5f9")
                .lineWidth(0.5)
                .moveTo(40, currentY)
                .lineTo(555, currentY)
