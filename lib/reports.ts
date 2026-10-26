@@ -163,6 +163,7 @@ export function buildDailyActivityReportHtml(input: {
     { dealerLabel: "DEALERS IN 60 DAYS", min: 60, max: 74 },
     { dealerLabel: "DEALERS IN 45 DAYS", min: 45, max: 59 },
     { dealerLabel: "DEALERS IN 30 DAYS", min: 30, max: 44 },
+    { dealerLabel: "DEALERS LESS THAN 30 DAYS", min: 0, max: 29 },
   ];
 
   // Active dealer sets derived strictly from the current updated due sheet
@@ -173,36 +174,49 @@ export function buildDailyActivityReportHtml(input: {
     dues.map((d) => (d.companyName || "").trim().toLowerCase()).filter(Boolean)
   );
 
-  // Returns unique dealer count, total outstanding, and reminders sent today for a bucket
+  // Returns unique dealer count, total outstanding, and reminders sent today for a bucket.
+  // Dealer count + outstanding are computed from BILL AGE in due records (matches dashboard).
+  // remindersSentToday still comes from todayLogs.
   const getBucketInfo = (minAge: number, maxAge: number) => {
+    const today = new Date();
+
+    // Group dues by dealer key, find each dealer's OLDEST invoice age
+    const dealerMap = new Map<string, { dues: typeof dues; oldestAge: number }>();
+    for (const due of dues) {
+      const key = (due.companyName || due.dealerCode || due.customerCode || "Unknown").trim();
+      const age = getBillAgeDays(due.billDate || due.invoiceDate, today) ?? 0;
+      const existing = dealerMap.get(key);
+      if (!existing) {
+        dealerMap.set(key, { dues: [due], oldestAge: age });
+      } else {
+        existing.dues.push(due);
+        if (age > existing.oldestAge) existing.oldestAge = age;
+      }
+    }
+
+    // A dealer falls in this bucket if their OLDEST invoice age is within [minAge, maxAge]
+    const matchedDealers = Array.from(dealerMap.values()).filter(
+      (d) => d.oldestAge >= minAge && d.oldestAge <= maxAge
+    );
+
+    const dealerCount = matchedDealers.length;
+    const amount = matchedDealers.reduce(
+      (sum, d) => sum + d.dues.reduce((s, due) => s + (due.amount || 0), 0),
+      0
+    );
+
+    // Reminders sent today: still from todayLogs using rule trigger day range
     const matchingRules = (rules || []).filter(r => r.triggerDay >= minAge && r.triggerDay <= maxAge);
     const ruleIds = matchingRules.map(r => r.id);
-
-    const sentTodayLogs = todayLogs.filter(
+    const remindersSentToday = todayLogs.filter(
       (log) => log.status === "sent" && (ruleIds.includes(log.ruleId) || (log.reminderDay >= minAge && log.reminderDay <= maxAge))
-    );
-    const remindersSentToday = sentTodayLogs.length;
-
-    // Filter strictly to dealers currently active in the updated due sheet
-    const ruleDealerCodes = Array.from(new Set(sentTodayLogs.map(log => log.dealerCode).filter(Boolean)))
-      .filter((code) => activeDealerCodes.has(code.trim().toLowerCase()) || activeDealerNames.has(code.trim().toLowerCase()));
-    const dealerCount = ruleDealerCodes.length;
-
-    // Sum of ALL open dues for these dealers (accounting for entire dealer outstanding, not just single invoices)
-    const dealersAllDues = dues.filter(due =>
-      ruleDealerCodes.includes(due.dealerCode || due.customerCode) ||
-      ruleDealerCodes.includes(due.companyName)
-    );
-    const amount = dealersAllDues.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    ).length;
 
     return { amount, dealerCount, remindersSentToday };
   };
 
   const bucketCardRows = agingBuckets.map((b) => {
     const info = getBucketInfo(b.min, b.max);
-    if (info.remindersSentToday === 0) {
-      return "";
-    }
     return `
       <tr>
         <td class="metric-td" style="width:33.33%;padding:4px;vertical-align:top;">
