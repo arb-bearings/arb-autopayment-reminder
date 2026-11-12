@@ -92,22 +92,31 @@ export async function POST(request: NextRequest) {
       logs = await sendPendingReminders(user.id);
     }
 
-    // Always generate and send salesperson/manager summaries and owner activity report
-    const salespersonSummaries = await sendSalespersonSummaries(user, logs);
-    const activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
-    const ownerReport = await sendDailyActivityReport(user);
+    // Safely generate and send salesperson/manager summaries and owner activity report
+    let activeSalespersonCount = 0;
+    let ownerReportCount = 0;
+    try {
+      if (logs.length > 0) {
+        const salespersonSummaries = await sendSalespersonSummaries(user, logs);
+        activeSalespersonCount = salespersonSummaries.filter((s) => !s.skipped).length;
+        const ownerReport = await sendDailyActivityReport(user);
+        ownerReportCount = ownerReport.recipientCount;
+      }
+    } catch (reportError) {
+      console.error("Warning: Summary report dispatch failed after reminders were delivered:", reportError);
+    }
 
     await recordAuditLog(
       user,
       "Reminder Dispatch",
       "success",
-      `Processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReport.recipientCount} recipients.`
+      `Processed ${logs.length} reminders for matched contacts, sent ${activeSalespersonCount} salesperson summaries, and sent owner report to ${ownerReportCount} recipients.`
     );
 
     return makeResponse(
       request,
       `/dashboard/dues?message=${encodeURIComponent(
-        `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts${skippedNote}, sent ${activeSalespersonCount} manager summary report${activeSalespersonCount === 1 ? "" : "s"}, and sent owner summary to ${ownerReport.recipientCount} recipient${ownerReport.recipientCount === 1 ? "" : "s"}.`
+        `Sent ${logs.length} reminder${logs.length === 1 ? "" : "s"} for matched contacts${skippedNote}, sent ${activeSalespersonCount} manager summary report${activeSalespersonCount === 1 ? "" : "s"}, and sent owner summary to ${ownerReportCount} recipient${ownerReportCount === 1 ? "" : "s"}.`
       )}`,
       logs.length
     );

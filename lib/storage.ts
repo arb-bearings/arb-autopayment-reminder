@@ -758,3 +758,52 @@ export async function updateDatabase<T>(
   await writeDatabase(database, companyCode);
   return result;
 }
+
+export async function updateSingleReminderDispatchResult(
+  logId: string,
+  updates: { status: "sent" | "failed"; sentAt?: string; failureReason?: string },
+  dueUpdates?: { dueId: string; lastReminderDate: string; lastDispatchStatus: "sent" | "failed"; updatedBy?: string },
+  explicitCompanyCode?: string
+) {
+  try {
+    const companyCode = await resolveActiveCompanyCode(explicitCompanyCode);
+    const collection = await ensureDatabaseDocument(companyCode);
+    const nowIso = new Date().toISOString();
+
+    const updateOps: Promise<any>[] = [
+      collection.updateOne(
+        { _id: documentId, "reminderLogs.id": logId } as any,
+        {
+          $set: {
+            "reminderLogs.$.status": updates.status,
+            "reminderLogs.$.sentAt": updates.sentAt || "",
+            "reminderLogs.$.failureReason": updates.failureReason || "",
+            updatedAt: nowIso
+          }
+        }
+      )
+    ];
+
+    if (dueUpdates?.dueId) {
+      updateOps.push(
+        collection.updateOne(
+          { _id: documentId, "dueRecords.id": dueUpdates.dueId } as any,
+          {
+            $set: {
+              "dueRecords.$.lastReminderDate": dueUpdates.lastReminderDate,
+              "dueRecords.$.lastDispatchStatus": dueUpdates.lastDispatchStatus,
+              "dueRecords.$.updatedBy": dueUpdates.updatedBy || "",
+              updatedAt: nowIso
+            },
+            $inc: { "dueRecords.$.reminderCount": 1 }
+          }
+        )
+      );
+    }
+
+    await Promise.all(updateOps);
+    cacheMap.delete(companyCode);
+  } catch (err) {
+    console.error(`[storage] Failed to persist single reminder dispatch result (${logId}):`, err);
+  }
+}

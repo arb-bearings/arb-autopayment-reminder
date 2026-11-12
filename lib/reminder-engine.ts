@@ -10,7 +10,7 @@ import {
   isE164PhoneNumber,
   resolveDispatchSettings
 } from "@/lib/dispatch-settings";
-import { readDatabase, updateDatabase } from "@/lib/storage";
+import { readDatabase, updateDatabase, updateSingleReminderDispatchResult } from "@/lib/storage";
 import type {
   CashDiscountPolicy,
   DashboardStats,
@@ -2119,6 +2119,14 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
             due.lastDispatchStatus = status;
             due.updatedBy = user.id;
           }
+
+          // Progressively persist confirmed delivery to MongoDB immediately
+          await updateSingleReminderDispatchResult(
+            log.id,
+            { status, sentAt: log.sentAt, failureReason: "" },
+            due ? { dueId: due.id, lastReminderDate: log.sentAt, lastDispatchStatus: status, updatedBy: user.id } : undefined,
+            user.companyCode || user.companyName
+          );
         } catch (error) {
           log.status = "failed";
           log.failureReason =
@@ -2128,6 +2136,14 @@ export async function sendPendingReminders(ownerId: string, ruleIds?: string[], 
             due.lastDispatchStatus = "failed";
             due.updatedBy = user.id;
           }
+
+          // Progressively persist failed delivery to MongoDB immediately
+          await updateSingleReminderDispatchResult(
+            log.id,
+            { status: "failed", sentAt: "", failureReason: log.failureReason },
+            due ? { dueId: due.id, lastReminderDate: due.lastReminderDate || "", lastDispatchStatus: "failed", updatedBy: user.id } : undefined,
+            user.companyCode || user.companyName
+          );
         }
       }
     } finally {

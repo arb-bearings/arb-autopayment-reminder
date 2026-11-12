@@ -9,10 +9,12 @@ interface SendQueueButtonProps {
   className?: string;
 }
 
+const BATCH_SIZE = 10;
+
 /**
  * SendQueueButton — replaces the ProtectedSubmitButton for "Send generated queue".
- * Shows a full-screen progress overlay with a real-time progress bar while the
- * server is processing, then redirects when done.
+ * Sends reminders in small batches to avoid Vercel serverless timeout.
+ * Shows a full-screen progress overlay with a real-time progress bar.
  */
 export function SendQueueButton({
   form,
@@ -25,16 +27,10 @@ export function SendQueueButton({
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState(0);
   const [sent, setSent] = useState(0);
+  const [failed, setFailed] = useState(0);
   const [total, setTotal] = useState(0);
   const [statusLabel, setStatusLabel] = useState("Preparing…");
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  function clearProgressInterval() {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }
+  const abortRef = useRef(false);
 
   async function doSend(password: string) {
     if (confirmationMessage && !window.confirm(confirmationMessage)) return;
@@ -42,64 +38,129 @@ export function SendQueueButton({
     // Collect selected logIds from the form
     const formEl = form ? document.getElementById(form) as HTMLFormElement : null;
     const formData = formEl ? new FormData(formEl) : new FormData();
+    const allLogIds = formData.getAll("logIds").map((entry) => String(entry).trim()).filter(Boolean);
 
-    // Always include the password
-    formData.set("operationPassword", password);
+    if (allLogIds.length === 0) {
+      alert("No reminders selected to send.");
+      return;
+    }
 
     setSending(true);
-    setProgress(5);
-    setStatusLabel("Connecting to server…");
+    setProgress(0);
+    setSent(0);
+    setFailed(0);
+    setTotal(allLogIds.length);
+    setStatusLabel("Starting batch dispatch…");
+    abortRef.current = false;
 
-    // Animate progress smoothly while waiting
-    let fakeProgress = 5;
-    intervalRef.current = setInterval(() => {
-      fakeProgress = Math.min(fakeProgress + Math.random() * 3, 88);
-      setProgress(fakeProgress);
-    }, 400);
+    // Split logIds into batches
+    const batches: string[][] = [];
+    for (let i = 0; i < allLogIds.length; i += BATCH_SIZE) {
+      batches.push(allLogIds.slice(i, i + BATCH_SIZE));
+    }
 
-    try {
-      // Send X-Queue-Fetch header so the API returns JSON instead of a redirect
-      const response = await fetch("/api/reminders/send", {
-        method: "POST",
-        headers: { "X-Queue-Fetch": "1" },
-        body: formData
-      });
+    let totalSent = 0;
+    let totalFailed = 0;
+    const allErrors: string[] = [];
+    let hadFatalError = false;
 
-      clearProgressInterval();
+    for (let i = 0; i < batches.length; i++) {
+      if (abortRef.current) break;
 
-      if (response.ok) {
-        const data = await response.json() as { count: number; redirectUrl: string };
-        const count = data.count ?? 0;
-        if (count > 0) {
-          setTotal(count);
-          setSent(count);
-          setStatusLabel(`✓ Sent ${count} reminder${count === 1 ? "" : "s"}`);
+      const batch = batches[i];
+      const isLastBatch = i === batches.length - 1;
+
+      setStatusLabel(
+        `Sending batch ${i + 1} of ${batches.length} (${batch.length} reminders)…`
+      );
+
+      try {
+        const response = await fetch("/api/reminders/send-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            logIds: batch,
+            operationPassword: password,
+            sendReports: isLastBatch
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json() as {
+            sent: number;
+            failed: number;
+            errors: string[];
+          };
+          totalSent += data.sent;
+          totalFailed += data.failed;
+          if (data.errors?.length) {
+            allErrors.push(...data.errors);
+          }
         } else {
-          setStatusLabel("✓ Done! Redirecting…");
+          // API error — try to read message
+          let errMsg = "Batch failed";
+          try {
+            const errData = await response.json() as { error?: string };
+            errMsg = errData.error || errMsg;
+          } catch { /* ignore */ }
+
+          // If it's an auth/permission error, stop immediately
+          if (response.status === 403 || response.status === 401) {
+            setStatusLabel(`Error: ${errMsg}`);
+            hadFatalError = true;
+            break;
+          }
+
+          // For other errors, count the batch as failed but continue
+          totalFailed += batch.length;
+          allErrors.push(errMsg);
         }
-        setProgress(100);
-        setTimeout(() => {
-          window.location.href = data.redirectUrl || "/dashboard/dues";
-        }, 1200);
-      } else {
-        // API returned an error — try to read the message
-        let errMsg = "Send failed. Please try again.";
-        try {
-          const errData = await response.json() as { error?: string; message?: string };
-          errMsg = errData.error || errData.message || errMsg;
-        } catch { /* ignore */ }
-        setProgress(100);
-        setStatusLabel(`Error: ${errMsg}`);
-        setTimeout(() => { setSending(false); setProgress(0); }, 3000);
+      } catch {
+        // Network error — count batch as failed but try to continue
+        totalFailed += batch.length;
+        allErrors.push(`Network error on batch ${i + 1}`);
       }
-    } catch {
-      clearProgressInterval();
+
+      // Update progress
+      const processed = totalSent + totalFailed;
+      setSent(totalSent);
+      setFailed(totalFailed);
+      setProgress(Math.round((processed / allLogIds.length) * 100));
+    }
+
+    // Final state
+    if (!hadFatalError) {
       setProgress(100);
-      setStatusLabel("Network error — check your connection.");
-      setTimeout(() => { setSending(false); setProgress(0); }, 3000);
+      if (totalFailed > 0) {
+        setStatusLabel(
+          `✓ Done — ${totalSent} sent, ${totalFailed} failed. Redirecting…`
+        );
+      } else {
+        setStatusLabel(`✓ All ${totalSent} reminders sent! Redirecting…`);
+      }
+
+      setTimeout(() => {
+        const msg = encodeURIComponent(
+          `Sent ${totalSent} reminder${totalSent === 1 ? "" : "s"}${
+            totalFailed > 0 ? `, ${totalFailed} failed` : ""
+          }.`
+        );
+        window.location.href = `/dashboard/dues?message=${msg}`;
+      }, 2000);
+    } else {
+      // Fatal error — let user dismiss after 5 seconds
+      setProgress(100);
+      if (totalSent > 0) {
+        setStatusLabel(
+          `Stopped — ${totalSent} sent before error. ${statusLabel}`
+        );
+      }
+      setTimeout(() => {
+        setSending(false);
+        setProgress(0);
+      }, 5000);
     }
   }
-
 
   function handleClick() {
     // Check if dispatch password is needed
@@ -183,6 +244,11 @@ export function SendQueueButton({
             {total > 0 && (
               <p className="send-progress-count">
                 <strong>{sent}</strong> of <strong>{total}</strong> reminders sent
+                {failed > 0 && (
+                  <span style={{ color: "var(--danger, #e53e3e)", marginLeft: 8 }}>
+                    ({failed} failed)
+                  </span>
+                )}
               </p>
             )}
 
