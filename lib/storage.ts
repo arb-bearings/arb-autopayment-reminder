@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getMongoDatabase } from "@/lib/mongodb";
 import { buildEmailBody, buildWhatsappBody, buildSubject, createDefaultRuleSet } from "@/lib/defaults";
 import { extractDealerCodeAndName, splitDealerCodeAndName } from "@/lib/dealer-utils";
+import { normalizeCompanyName, normalizeCompanyNameStrict } from "@/lib/utils";
 import { ACTIVE_COMPANY_COOKIE, normalizeCompanyCode, type CompanyCode, SUPPORTED_COMPANIES } from "@/lib/company-workspace";
 import type { AppDatabase } from "@/lib/types";
 
@@ -476,20 +477,37 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
   const activeRuleIds = new Set(db.reminderRules.map((r) => r.id));
   db.templates = db.templates.filter((t) => activeRuleIds.has(t.ruleId));
 
-  // Auto-heal dueRecords against masterContacts if contacts were missing due to embedded dealer code in companyName
+  // Auto-heal dueRecords against masterContacts if contacts were missing due to embedded dealer code in companyName or punctuation variations
   if (db.masterContacts.length > 0 && db.dueRecords.length > 0) {
     const contactMapByCode = new Map<string, typeof db.masterContacts[0]>();
     const contactMapByName = new Map<string, typeof db.masterContacts[0]>();
+    const contactMapByNormName = new Map<string, typeof db.masterContacts[0]>();
+    const contactMapByStrictName = new Map<string, typeof db.masterContacts[0]>();
+
     for (const c of db.masterContacts) {
       if (c.dealerCode) contactMapByCode.set(c.dealerCode.toLowerCase().trim(), c);
-      if (c.companyName) contactMapByName.set(c.companyName.toLowerCase().trim(), c);
+      if (c.companyName) {
+        contactMapByName.set(c.companyName.toLowerCase().trim(), c);
+        const normKey = normalizeCompanyName(c.companyName);
+        if (normKey) contactMapByNormName.set(normKey, c);
+        const strictKey = normalizeCompanyNameStrict(c.companyName);
+        if (strictKey) contactMapByStrictName.set(strictKey, c);
+      }
     }
 
     for (const due of db.dueRecords) {
-      if (due.contactMatchStatus === "missing" || !due.matchedContactId) {
+      if (due.contactMatchStatus === "missing" || !due.matchedContactId || !due.dealerCode) {
         const dCode = (due.dealerCode || due.customerCode || "").toLowerCase().trim();
         const dName = (due.companyName || "").toLowerCase().trim();
-        const matched = (dCode ? contactMapByCode.get(dCode) : null) || (dName ? contactMapByName.get(dName) : null);
+        const dNorm = normalizeCompanyName(due.companyName || "");
+        const dStrict = normalizeCompanyNameStrict(due.companyName || "");
+
+        const matched =
+          (dCode ? contactMapByCode.get(dCode) : null) ||
+          (dName ? contactMapByName.get(dName) : null) ||
+          (dNorm ? contactMapByNormName.get(dNorm) : null) ||
+          (dStrict && dStrict.length >= 4 ? contactMapByStrictName.get(dStrict) : null);
+
         if (matched) {
           due.matchedContactId = matched.id;
           due.matchedContactName = matched.primaryContact || matched.companyName || "";

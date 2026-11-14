@@ -12,6 +12,32 @@ export function normalizeText(value: string) {
   return value.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
+/**
+ * Normalizes company/party names for fuzzy matching across systems (e.g. Tally vs Excel/CRM)
+ * Removes parentheses, brackets, dots, commas, hyphens, quotes, and standardizes '&' to 'and'.
+ */
+export function normalizeCompanyName(value: string | undefined | null): string {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[\(\)\[\]\{\}\.,\-_'"\/\\#@!]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Strict alphanumeric normalization for company names.
+ * Strips all whitespace and non-alphanumeric characters.
+ */
+export function normalizeCompanyNameStrict(value: string | undefined | null): string {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 export function getDuePartyKey(input: {
   dealerCode?: string;
   customerCode?: string;

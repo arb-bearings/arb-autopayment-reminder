@@ -1,5 +1,5 @@
 import type { DueRecord, MasterContact } from "@/lib/types";
-import { normalizeText } from "@/lib/utils";
+import { normalizeText, normalizeCompanyName, normalizeCompanyNameStrict } from "@/lib/utils";
 import { extractDealerCodeAndName } from "@/lib/dealer-utils";
 
 type DueMatchInput = Pick<
@@ -64,6 +64,47 @@ export function findMatchingMasterContact(due: DueMatchInput, contacts: MasterCo
 
     if (companyMatch) {
       return companyMatch;
+    }
+  }
+
+  // Fallback 1: Normalized company name (ignores parentheses, brackets, dots, commas, &, etc.)
+  const rawDueName = extractedDue.companyName || due.companyName || "";
+  const normDueName = normalizeCompanyName(rawDueName);
+  if (normDueName) {
+    const normMatch = contacts.find((contact) => {
+      const cNorm = normalizeCompanyName(contact.companyName);
+      if (cNorm === normDueName) {
+        return true;
+      }
+      const extractedContact = extractDealerCodeAndName(
+        contact.dealerCode || contact.customerCode || "",
+        contact.companyName || ""
+      );
+      return normalizeCompanyName(extractedContact.companyName) === normDueName;
+    });
+
+    if (normMatch) {
+      return normMatch;
+    }
+  }
+
+  // Fallback 2: Strict alphanumeric match (e.g. "LimitedNagpur" vs "Limited (Nagpur)")
+  const strictDueName = normalizeCompanyNameStrict(rawDueName);
+  if (strictDueName && strictDueName.length >= 4) {
+    const strictMatch = contacts.find((contact) => {
+      const cStrict = normalizeCompanyNameStrict(contact.companyName);
+      if (cStrict === strictDueName) {
+        return true;
+      }
+      const extractedContact = extractDealerCodeAndName(
+        contact.dealerCode || contact.customerCode || "",
+        contact.companyName || ""
+      );
+      return normalizeCompanyNameStrict(extractedContact.companyName) === strictDueName;
+    });
+
+    if (strictMatch) {
+      return strictMatch;
     }
   }
 
