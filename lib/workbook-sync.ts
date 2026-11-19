@@ -243,9 +243,19 @@ function syncManagersFromMasterContacts(
   }>();
 
   for (const contact of contacts) {
-    const name = contact.salespersonName?.trim() || "";
-    const email = contact.salespersonEmail?.trim() || "";
-    const employeeId = contact.salespersonId?.trim() || "";
+    const rawMgrCode = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["manager code"] || contact.raw["manger code"] || contact.raw["sales person code"] || contact.raw["employee id"] || "")
+      : "";
+    const rawMgrName = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["manager name"] || contact.raw["manger name"] || contact.raw["sales person name"] || contact.raw["salesperson"] || "")
+      : "";
+    const rawMgrEmail = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["manger mail id"] || contact.raw["manager mail id"] || contact.raw["manager email"] || contact.raw["sales person email"] || "")
+      : "";
+
+    const employeeId = (rawMgrCode || contact.salespersonId || "").trim();
+    const name = (rawMgrName || contact.salespersonName || "").trim();
+    const email = (rawMgrEmail || contact.salespersonEmail || "").trim();
     const rawBackOffice = contact.raw && typeof contact.raw === "object"
       ? (contact.raw["back office mail id"] ||
          contact.raw["back office mail ie"] ||
@@ -258,7 +268,7 @@ function syncManagersFromMasterContacts(
 
     if (!name && !email) continue;
 
-    const key = (employeeId || email || name).toLowerCase();
+    const key = (employeeId || name || email).toLowerCase();
     const dealerCode = (contact.dealerCode || contact.customerCode || "").trim();
     const existing = managerMap.get(key);
 
@@ -284,11 +294,21 @@ function syncManagersFromMasterContacts(
   const existingManagers = database.salespersons.filter((s) => s.ownerId === configOwnerId);
 
   for (const data of managerMap.values()) {
-    const match = existingManagers.find(
-      (s) =>
-        (data.employeeId && s.employeeId.toLowerCase() === data.employeeId.toLowerCase()) ||
-        (data.email && s.email.toLowerCase() === data.email.toLowerCase())
-    );
+    const match = existingManagers.find((s) => {
+      // If both have employee IDs, match strictly on employee ID
+      if (data.employeeId && s.employeeId) {
+        return s.employeeId.trim().toLowerCase() === data.employeeId.trim().toLowerCase();
+      }
+      // If one has an employee ID and the other doesn't, do not merge them
+      if (data.employeeId || s.employeeId) {
+        return false;
+      }
+      // If neither has an employee ID, match on name or email
+      return (
+        (data.name && s.name.trim().toLowerCase() === data.name.trim().toLowerCase()) ||
+        (data.email && s.email.trim().toLowerCase() === data.email.trim().toLowerCase())
+      );
+    });
 
     if (match) {
       match.name = data.name || match.name;

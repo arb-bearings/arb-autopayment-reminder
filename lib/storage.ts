@@ -537,22 +537,26 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
       }
     }
     for (const c of db.masterContacts) {
-      if (!c.salespersonName && c.dealerCode) {
+      if (c.dealerCode) {
         const sp = spMap.get(c.dealerCode.toLowerCase().trim());
         if (sp) {
-          c.salespersonId = sp.id;
-          c.salespersonName = sp.name;
-          c.salespersonEmail = sp.email;
+          if (!c.salespersonName || c.salespersonId !== sp.id) {
+            c.salespersonId = sp.id;
+            c.salespersonName = sp.name;
+            c.salespersonEmail = sp.email;
+          }
         }
       }
     }
     for (const due of db.dueRecords) {
-      if ((!due.salespersonName || due.salespersonName === "Unassigned") && due.dealerCode) {
+      if (due.dealerCode) {
         const sp = spMap.get(due.dealerCode.toLowerCase().trim());
         if (sp) {
-          due.salespersonId = sp.id;
-          due.salespersonName = sp.name;
-          due.salespersonEmail = sp.email;
+          if (!due.salespersonName || due.salespersonName === "Unassigned" || due.salespersonId !== sp.id) {
+            due.salespersonId = sp.id;
+            due.salespersonName = sp.name;
+            due.salespersonEmail = sp.email;
+          }
         }
       }
     }

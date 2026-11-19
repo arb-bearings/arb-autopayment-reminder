@@ -881,10 +881,14 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
     (sp) => workspace.sharedOwnerIds.has(sp.ownerId) || sp.ownerId === workspace.configOwnerId
   );
 
-  // Collect map of salesperson email -> { name, email, phone, backOfficeEmail, records }
+  // Collect map of salesperson key -> { id, employeeId, name, email, phone, backOfficeEmail, records }
+  // We key by salesperson ID / employeeId so that multiple managers sharing an email (e.g. ST011 & ST016)
+  // each receive their own individual summary report and PDF.
   const salespersonMap = new Map<
     string,
     {
+      id: string;
+      employeeId?: string;
       name: string;
       email: string;
       phone?: string;
@@ -895,53 +899,51 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
 
   // 1. From database.salespersons
   for (const sp of configuredSalespersons) {
-    const emailKey = sp.email.trim().toLowerCase();
-    if (!emailKey) continue;
+    const email = sp.email.trim();
+    if (!email) continue;
+    const spKey = sp.id || sp.employeeId || sp.name;
     const normalizedDealerCodes = (sp.dealerCodes || []).map((code) => code.trim().toLowerCase());
 
     const assignedDues = dues.filter((due) => {
       const dueDealerCode = (due.dealerCode || due.customerCode || "").trim().toLowerCase();
-      const matchCode = normalizedDealerCodes.includes(dueDealerCode);
-      const matchEmail = (due.salespersonEmail || "").trim().toLowerCase() === emailKey;
-      const matchName = (due.salespersonName || "").trim().toLowerCase() === sp.name.trim().toLowerCase();
-      return matchCode || matchEmail || matchName;
+      const matchCode = dueDealerCode ? normalizedDealerCodes.includes(dueDealerCode) : false;
+      const matchId = Boolean(due.salespersonId && due.salespersonId === sp.id);
+      const matchName = Boolean(due.salespersonName && due.salespersonName.trim().toLowerCase() === sp.name.trim().toLowerCase());
+      return matchCode || matchId || matchName;
     });
 
-    const existing = salespersonMap.get(emailKey);
-    if (existing) {
-      const idSet = new Set(existing.records.map((r) => r.id));
-      for (const r of assignedDues) {
-        if (!idSet.has(r.id)) {
-          existing.records.push(r);
-          idSet.add(r.id);
-        }
-      }
-      if (!existing.backOfficeEmail && sp.backOfficeEmail?.trim()) {
-        existing.backOfficeEmail = sp.backOfficeEmail.trim();
-      }
-    } else {
-      salespersonMap.set(emailKey, {
-        name: sp.name,
-        email: sp.email.trim(),
-        phone: sp.phoneNumber,
-        backOfficeEmail: sp.backOfficeEmail?.trim(),
-        records: assignedDues
-      });
-    }
+    salespersonMap.set(spKey, {
+      id: sp.id,
+      employeeId: sp.employeeId,
+      name: sp.name,
+      email,
+      phone: sp.phoneNumber,
+      backOfficeEmail: sp.backOfficeEmail?.trim(),
+      records: assignedDues
+    });
   }
 
   // 2. From dues with salespersonEmail that might not be in database.salespersons
+  const unassignedDues = dues.filter((due) => {
+    for (const spData of salespersonMap.values()) {
+      if (spData.records.some((r) => r.id === due.id)) return false;
+    }
+    return Boolean(due.salespersonEmail);
+  });
+
   const groupedByDueEmail = groupBy(
-    dues.filter((entry) => entry.salespersonEmail),
-    (entry) => entry.salespersonEmail.trim().toLowerCase()
+    unassignedDues,
+    (entry) => (entry.salespersonName || entry.salespersonEmail).trim().toLowerCase()
   );
 
-  for (const [emailKey, records] of groupedByDueEmail.entries()) {
-    if (!salespersonMap.has(emailKey)) {
-      const name = records[0]?.salespersonName || emailKey;
-      salespersonMap.set(emailKey, {
+  for (const [key, records] of groupedByDueEmail.entries()) {
+    const name = records[0]?.salespersonName || records[0]?.salespersonEmail || key;
+    const email = records[0]?.salespersonEmail || "";
+    if (email && !salespersonMap.has(key)) {
+      salespersonMap.set(key, {
+        id: key,
         name,
-        email: records[0]?.salespersonEmail || emailKey,
+        email,
         records
       });
     }
@@ -949,7 +951,7 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
 
   const results: Array<{ email: string; skipped: boolean; recipientCount: number }> = [];
 
-  for (const [emailKey, spData] of salespersonMap.entries()) {
+  for (const [spKey, spData] of salespersonMap.entries()) {
     try {
       const { name, email, phone, records } = spData;
 
@@ -985,7 +987,7 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
           return spData.backOfficeEmail.trim();
         }
         const spRecord = configuredSalespersons.find(
-          (sp) => sp.email.trim().toLowerCase() === emailKey && sp.backOfficeEmail?.trim()
+          (sp) => (sp.id === spData.id || sp.employeeId === spData.employeeId) && sp.backOfficeEmail?.trim()
         );
         if (spRecord?.backOfficeEmail?.trim()) {
           return spRecord.backOfficeEmail.trim();
@@ -996,7 +998,6 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         const contacts = filterSharedCompanyRecords(database.masterContacts, workspace.sharedOwnerIds);
         const matchingContact = contacts.find((c) => {
           const contactDealer = (c.dealerCode || c.customerCode || "").trim().toLowerCase();
-          const hasEmailMatch = (c.salespersonEmail || "").trim().toLowerCase() === emailKey;
           const hasDealerMatch = contactDealer && assignedDealerCodes.has(contactDealer);
           const hasBo = Boolean(
             c.backOfficeEmail?.trim() ||
@@ -1007,7 +1008,7 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
               c.raw["backoffice mail id"]
             ))
           );
-          return (hasEmailMatch || hasDealerMatch) && hasBo;
+          return hasDealerMatch && hasBo;
         });
 
         return (
@@ -1056,8 +1057,8 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         }
       }
     } catch (err) {
-      console.error(`Failed to send salesperson summary to ${emailKey}:`, err);
-      results.push({ email: emailKey, skipped: true, recipientCount: 0 });
+      console.error(`Failed to send salesperson summary to ${spData.email} (${spData.name}):`, err);
+      results.push({ email: spData.email, skipped: true, recipientCount: 0 });
     }
   }
 
