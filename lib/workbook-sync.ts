@@ -239,6 +239,9 @@ function syncManagersFromMasterContacts(
     name: string;
     email: string;
     backOfficeEmail: string;
+    areaManagerCode?: string;
+    areaManagerName?: string;
+    areaManagerEmail?: string;
     dealerCodesSet: Set<string>;
   }>();
 
@@ -266,6 +269,20 @@ function syncManagersFromMasterContacts(
       : "";
     const backOfficeEmail = (contact.backOfficeEmail?.trim() || rawBackOffice.trim());
 
+    const rawAreaMgrCode = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["area manager code"] || contact.raw["area manager id"] || contact.raw["areamanager code"] || contact.raw["area mgr code"] || "")
+      : "";
+    const rawAreaMgrName = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["area manager"] || contact.raw["area manager name"] || contact.raw["areamanager"] || contact.raw["areamanager name"] || contact.raw["area mgr name"] || "")
+      : "";
+    const rawAreaMgrEmail = contact.raw && typeof contact.raw === "object"
+      ? (contact.raw["area manager mail id"] || contact.raw["area manager email id"] || contact.raw["area manager email"] || contact.raw["area manager mail"] || contact.raw["area manager mailid"] || contact.raw["areamanager mail id"] || contact.raw["areamanager email"] || contact.raw["area mgr mail id"] || "")
+      : "";
+
+    const areaManagerCode = (contact.areaManagerCode?.trim() || rawAreaMgrCode.trim());
+    const areaManagerName = (contact.areaManagerName?.trim() || rawAreaMgrName.trim());
+    const areaManagerEmail = (contact.areaManagerEmail?.trim() || rawAreaMgrEmail.trim());
+
     if (!name && !email) continue;
 
     const key = (employeeId || name || email).toLowerCase();
@@ -275,6 +292,9 @@ function syncManagersFromMasterContacts(
     if (existing) {
       if (dealerCode) existing.dealerCodesSet.add(dealerCode);
       if (backOfficeEmail) existing.backOfficeEmail = backOfficeEmail;
+      if (areaManagerCode) existing.areaManagerCode = areaManagerCode;
+      if (areaManagerName) existing.areaManagerName = areaManagerName;
+      if (areaManagerEmail) existing.areaManagerEmail = areaManagerEmail;
     } else {
       const dealerCodesSet = new Set<string>();
       if (dealerCode) dealerCodesSet.add(dealerCode);
@@ -283,6 +303,9 @@ function syncManagersFromMasterContacts(
         name,
         email,
         backOfficeEmail,
+        areaManagerCode,
+        areaManagerName,
+        areaManagerEmail,
         dealerCodesSet
       });
     }
@@ -315,6 +338,9 @@ function syncManagersFromMasterContacts(
       match.email = data.email || match.email;
       match.employeeId = data.employeeId || match.employeeId;
       if (data.backOfficeEmail) match.backOfficeEmail = data.backOfficeEmail;
+      if (data.areaManagerCode) match.areaManagerCode = data.areaManagerCode;
+      if (data.areaManagerName) match.areaManagerName = data.areaManagerName;
+      if (data.areaManagerEmail) match.areaManagerEmail = data.areaManagerEmail;
       const merged = new Set([...match.dealerCodes, ...data.dealerCodesSet]);
       match.dealerCodes = Array.from(merged).sort();
       match.updatedAt = now;
@@ -327,6 +353,9 @@ function syncManagersFromMasterContacts(
         email: data.email,
         phoneNumber: "",
         backOfficeEmail: data.backOfficeEmail,
+        areaManagerCode: data.areaManagerCode,
+        areaManagerName: data.areaManagerName,
+        areaManagerEmail: data.areaManagerEmail,
         dealerCodes: Array.from(data.dealerCodesSet).sort(),
         createdAt: now,
         updatedAt: now

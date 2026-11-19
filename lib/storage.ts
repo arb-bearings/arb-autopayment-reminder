@@ -191,6 +191,41 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
                     (contact.raw as Record<string, unknown>)["backoffice email"]
                   )
                 : ""),
+            areaManagerCode:
+              toStringValue((contact as Record<string, unknown>)?.areaManagerCode) ||
+              (contact?.raw && typeof contact.raw === "object"
+                ? toStringValue(
+                    (contact.raw as Record<string, unknown>)["area manager code"] ||
+                    (contact.raw as Record<string, unknown>)["area manager id"] ||
+                    (contact.raw as Record<string, unknown>)["areamanager code"] ||
+                    (contact.raw as Record<string, unknown>)["area mgr code"]
+                  )
+                : ""),
+            areaManagerName:
+              toStringValue((contact as Record<string, unknown>)?.areaManagerName) ||
+              (contact?.raw && typeof contact.raw === "object"
+                ? toStringValue(
+                    (contact.raw as Record<string, unknown>)["area manager"] ||
+                    (contact.raw as Record<string, unknown>)["area manager name"] ||
+                    (contact.raw as Record<string, unknown>)["areamanager"] ||
+                    (contact.raw as Record<string, unknown>)["areamanager name"] ||
+                    (contact.raw as Record<string, unknown>)["area mgr name"]
+                  )
+                : ""),
+            areaManagerEmail:
+              toStringValue((contact as Record<string, unknown>)?.areaManagerEmail) ||
+              (contact?.raw && typeof contact.raw === "object"
+                ? toStringValue(
+                    (contact.raw as Record<string, unknown>)["area manager mail id"] ||
+                    (contact.raw as Record<string, unknown>)["area manager mail"] ||
+                    (contact.raw as Record<string, unknown>)["area manager email"] ||
+                    (contact.raw as Record<string, unknown>)["area manager email id"] ||
+                    (contact.raw as Record<string, unknown>)["area manager mailid"] ||
+                    (contact.raw as Record<string, unknown>)["areamanager mail id"] ||
+                    (contact.raw as Record<string, unknown>)["areamanager email"] ||
+                    (contact.raw as Record<string, unknown>)["area mgr mail id"]
+                  )
+                : ""),
             importedAt: toStringValue(contact?.importedAt),
             raw:
               contact?.raw && typeof contact.raw === "object"
@@ -442,6 +477,9 @@ function normalizeDatabase(input: Partial<AppDatabase> | null | undefined): AppD
           email: toStringValue(entry?.email),
           phoneNumber: toStringValue(entry?.phoneNumber),
           backOfficeEmail: toStringValue(entry?.backOfficeEmail),
+          areaManagerCode: toStringValue(entry?.areaManagerCode),
+          areaManagerName: toStringValue(entry?.areaManagerName),
+          areaManagerEmail: toStringValue(entry?.areaManagerEmail),
           dealerCodes: Array.isArray(entry?.dealerCodes)
             ? entry.dealerCodes
                 .map((code) => {

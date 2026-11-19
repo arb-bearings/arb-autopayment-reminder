@@ -212,6 +212,40 @@ const masterFieldCandidates = {
     "back office mailid",
     "back office e mail",
     "backoffice e mail"
+  ],
+  areaManagerCode: [
+    "area manager code",
+    "area manager id",
+    "area manager coi",
+    "area manager co",
+    "area manager co i",
+    "areamanager code",
+    "areamanager id",
+    "area mgr code",
+    "area mgr id"
+  ],
+  areaManagerName: [
+    "area manager",
+    "area manager name",
+    "areamanager",
+    "areamanager name",
+    "area mgr name",
+    "area mgr"
+  ],
+  areaManagerEmail: [
+    "area manager mail id",
+    "area manager mail",
+    "area manager email",
+    "area manager email id",
+    "area manager mailid",
+    "areamanager mail id",
+    "areamanager mail",
+    "areamanager email",
+    "areamanager email id",
+    "areamanager mailid",
+    "area mgr mail id",
+    "area mgr email",
+    "area mgr mail"
   ]
 } as const;
 
@@ -1255,6 +1289,9 @@ export function mapMasterRows(rows: RawRow[], ownerId: string) {
         salespersonName: toText(pickValue(row, masterFieldCandidates.salespersonName)),
         salespersonEmail: toText(pickValue(row, masterFieldCandidates.salespersonEmail)),
         backOfficeEmail: toText(pickValue(row, masterFieldCandidates.backOfficeEmail)),
+        areaManagerCode: toText(pickValue(row, masterFieldCandidates.areaManagerCode)),
+        areaManagerName: toText(pickValue(row, masterFieldCandidates.areaManagerName)),
+        areaManagerEmail: toText(pickValue(row, masterFieldCandidates.areaManagerEmail)),
         importedAt,
         raw: Object.fromEntries(
           Object.entries(row).map(([key, value]) => [key, toText(value)])

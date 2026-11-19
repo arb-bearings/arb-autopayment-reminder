@@ -893,6 +893,9 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
       email: string;
       phone?: string;
       backOfficeEmail?: string;
+      areaManagerCode?: string;
+      areaManagerName?: string;
+      areaManagerEmail?: string;
       records: DueRecord[];
     }
   >();
@@ -919,6 +922,9 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
       email,
       phone: sp.phoneNumber,
       backOfficeEmail: sp.backOfficeEmail?.trim(),
+      areaManagerCode: sp.areaManagerCode?.trim(),
+      areaManagerName: sp.areaManagerName?.trim(),
+      areaManagerEmail: sp.areaManagerEmail?.trim(),
       records: assignedDues
     });
   }
@@ -1023,7 +1029,80 @@ export async function sendSalespersonSummaries(user: ReportUser, sentLogs: Remin
         ).trim();
       })();
 
-      const ccList = backOfficeEmail ? [backOfficeEmail] : undefined;
+      // Resolve Area Manager email(s) to CC on manager summary
+      const areaManagerEmails = (() => {
+        const set = new Set<string>();
+
+        // 1. From the salesperson object
+        if (spData.areaManagerEmail?.trim()) {
+          set.add(spData.areaManagerEmail.trim().toLowerCase());
+        }
+        const spRecord = configuredSalespersons.find(
+          (sp) => sp.id === spData.id || (sp.employeeId && sp.employeeId === spData.employeeId)
+        );
+        if (spRecord?.areaManagerEmail?.trim()) {
+          set.add(spRecord.areaManagerEmail.trim().toLowerCase());
+        }
+
+        // 2. From all contacts matching the assigned dealers of this salesperson/manager
+        const assignedDealerCodes = new Set(
+          records.map((d) => (d.dealerCode || d.customerCode || "").trim().toLowerCase()).filter(Boolean)
+        );
+        const contacts = filterSharedCompanyRecords(database.masterContacts, workspace.sharedOwnerIds);
+
+        for (const c of contacts) {
+          const contactDealer = (c.dealerCode || c.customerCode || "").trim().toLowerCase();
+          const matchesDealer = contactDealer && assignedDealerCodes.has(contactDealer);
+          const matchesSpId = Boolean(c.salespersonId && (c.salespersonId === spData.id || c.salespersonId === spData.employeeId));
+          const matchesSpName = Boolean(c.salespersonName && c.salespersonName.trim().toLowerCase() === spData.name.trim().toLowerCase());
+
+          if (matchesDealer || matchesSpId || matchesSpName) {
+            const rawAmEmail = c.raw && typeof c.raw === "object"
+              ? (c.raw["area manager mail id"] ||
+                 c.raw["area manager email id"] ||
+                 c.raw["area manager email"] ||
+                 c.raw["area manager mail"] ||
+                 c.raw["area manager mailid"] ||
+                 c.raw["areamanager mail id"] ||
+                 c.raw["areamanager email id"] ||
+                 c.raw["areamanager email"] ||
+                 c.raw["areamanager mail"] ||
+                 c.raw["area mgr mail id"] ||
+                 c.raw["area mgr email"] ||
+                 "")
+              : "";
+            const amEmail = (c.areaManagerEmail?.trim() || rawAmEmail.trim()).toLowerCase();
+            if (amEmail && amEmail.includes("@") && amEmail !== email.toLowerCase()) {
+              set.add(amEmail);
+            }
+          }
+        }
+
+        return Array.from(set);
+      })();
+
+      // Combine back office email and area manager emails into CC list
+      const ccSet = new Set<string>();
+      if (backOfficeEmail) {
+        backOfficeEmail
+          .split(/[,;]/)
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean)
+          .forEach((e) => {
+            if (e !== email.toLowerCase()) ccSet.add(e);
+          });
+      }
+      for (const amEmail of areaManagerEmails) {
+        amEmail
+          .split(/[,;]/)
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean)
+          .forEach((e) => {
+            if (e !== email.toLowerCase()) ccSet.add(e);
+          });
+      }
+
+      const ccList = ccSet.size > 0 ? Array.from(ccSet) : undefined;
 
       const result = await sendReportEmail(
         settings,
